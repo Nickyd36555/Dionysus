@@ -8,6 +8,7 @@ import com.dionysus.tv.data.debrid.realdebrid.RealDebridAuthenticator
 import com.dionysus.tv.data.metadata.TmdbApi
 import com.dionysus.tv.data.scraper.orion.OrionApi
 import com.dionysus.tv.data.scraper.torrentio.TorrentioApi
+import com.dionysus.tv.data.update.GitHubApi
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -68,6 +69,11 @@ object ApiModule {
     @Singleton
     fun providePremiumizeApi(client: OkHttpClient, json: Json): PremiumizeApi =
         retrofit(PremiumizeApi.BASE_URL, client, json).create(PremiumizeApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideGitHubApi(client: OkHttpClient, json: Json): GitHubApi =
+        retrofit(GitHubApi.BASE_URL, client, json).create(GitHubApi::class.java)
 
     @Provides
     @Singleton

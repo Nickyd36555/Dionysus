@@ -20,6 +20,10 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
+
+        // Self-update source: the GitHub repo whose latest release is checked.
+        buildConfigField("String", "UPDATE_OWNER", "\"Nickyd36555\"")
+        buildConfigField("String", "UPDATE_REPO", "\"Dionysus\"")
     }
 
     buildTypes {

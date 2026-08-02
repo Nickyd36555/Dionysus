@@ -28,15 +28,21 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dionysus.tv.BuildConfig
 import com.dionysus.tv.player.ExternalPlayer
+import com.dionysus.tv.ui.update.UpdateViewModel
 import androidx.tv.material3.Button
 import androidx.tv.material3.ListItem
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsScreen(
+    viewModel: SettingsViewModel = hiltViewModel(),
+    updateViewModel: UpdateViewModel = hiltViewModel(),
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val updateState by updateViewModel.state.collectAsStateWithLifecycle()
 
     LazyColumn(
         modifier = Modifier
@@ -154,6 +160,32 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
                 enabled = row.enabled,
                 onToggle = { viewModel.toggleHomeRow(row.id, it) },
             )
+        }
+
+        // ---- App / updates -------------------------------------------------
+        item { SectionHeader("App") }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Version ${BuildConfig.VERSION_NAME}" +
+                        (updateState.info?.let { "  •  update to v${it.versionName} available" } ?: ""),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                updateState.message?.let {
+                    Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = updateViewModel::check, enabled = !updateState.checking) {
+                        Text(if (updateState.checking) "Checking…" else "Check for Updates")
+                    }
+                    if (updateState.isAvailable) {
+                        Button(onClick = updateViewModel::update, enabled = !updateState.downloading) {
+                            Text(if (updateState.downloading) "Updating… ${(updateState.progress * 100).toInt()}%" else "Update now")
+                        }
+                    }
+                }
+            }
         }
     }
 }
