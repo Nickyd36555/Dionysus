@@ -118,6 +118,43 @@ Open **Settings** on the device and add:
 
 ---
 
+## Releases & in-app auto-update
+
+Dionysus updates itself from this repo's GitHub Releases (it's sideloaded, not
+on the Play Store). The flow is fully automated once signing secrets are set.
+
+### One-time setup
+
+1. **Generate a signing keystore** (keep the file and passwords private):
+   ```bash
+   keytool -genkeypair -v -keystore dionysus-release.jks \
+     -alias dionysus -keyalg RSA -keysize 2048 -validity 10000
+   ```
+2. **Base64-encode it** for the GitHub secret:
+   ```bash
+   base64 -w0 dionysus-release.jks   # macOS: base64 -i dionysus-release.jks
+   ```
+3. In the repo, add **Settings → Secrets and variables → Actions**:
+   - `SIGNING_KEYSTORE_BASE64` — the base64 string from step 2
+   - `SIGNING_STORE_PASSWORD` — the keystore password
+   - `SIGNING_KEY_ALIAS` — `dionysus` (or your alias)
+   - `SIGNING_KEY_PASSWORD` — the key password
+4. Install the **first** signed release on every device (uninstall any debug
+   build first — different signature/package won't update in place).
+
+### Cutting a release
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+`.github/workflows/release.yml` then builds a signed APK (version derived from
+the tag) and publishes it as a GitHub Release. Installed apps see it via the
+home banner / Settings → App and update themselves.
+
+Local release builds work without secrets (they fall back to the debug key):
+`./gradlew assembleRelease`.
+
 ## Roadmap
 
 - tvOS target (shared domain logic, SwiftUI front-end)

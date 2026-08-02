@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -7,6 +9,18 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+// Release signing is sourced from CI environment variables first, then a local
+// (git-ignored) keystore.properties. Neither is committed, so the signing key
+// stays private. When nothing is configured, release builds fall back to the
+// debug key so `assembleRelease` still works for local testing.
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) keystorePropertiesFile.inputStream().use { load(it) }
+}
+fun signingValue(envName: String, propName: String): String? =
+    System.getenv(envName) ?: keystoreProperties.getProperty(propName)
+val hasReleaseSigning: Boolean = signingValue("SIGNING_KEYSTORE_PATH", "storeFile") != null
+
 android {
     namespace = "com.dionysus.tv"
     compileSdk = 35
@@ -15,8 +29,10 @@ android {
         applicationId = "com.dionysus.tv"
         minSdk = 23
         targetSdk = 34
-        versionCode = 4
-        versionName = "0.1.3"
+        // CI overrides these from the pushed tag so the APK's version matches
+        // the GitHub Release the in-app updater compares against.
+        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 4
+        versionName = System.getenv("VERSION_NAME") ?: "0.1.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -24,6 +40,17 @@ android {
         // Self-update source: the GitHub repo whose latest release is checked.
         buildConfigField("String", "UPDATE_OWNER", "\"Nickyd36555\"")
         buildConfigField("String", "UPDATE_REPO", "\"Dionysus\"")
+    }
+
+    signingConfigs {
+        create("release") {
+            if (hasReleaseSigning) {
+                storeFile = file(signingValue("SIGNING_KEYSTORE_PATH", "storeFile")!!)
+                storePassword = signingValue("SIGNING_STORE_PASSWORD", "storePassword")
+                keyAlias = signingValue("SIGNING_KEY_ALIAS", "keyAlias")
+                keyPassword = signingValue("SIGNING_KEY_PASSWORD", "keyPassword")
+            }
+        }
     }
 
     buildTypes {
@@ -38,6 +65,13 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            // Use the real release key when configured; fall back to debug so
+            // local `assembleRelease` still succeeds without a keystore.
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 

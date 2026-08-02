@@ -50,6 +50,12 @@
             </intent-filter>
         </activity>
 
+        <!-- Declare the dataSync type for WorkManager's foreground download service. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+
         <!-- Serves the downloaded update APK to the system package installer. -->
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -15,6 +15,8 @@ local.properties
 # Built APKs (distribute via GitHub Releases, not source control)
 *.apk
 
-# Secrets / API keys should never be committed
+# Secrets / API keys / signing material should never be committed
 secrets.properties
 apikeys.properties
+keystore.properties
+*.jks
