@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      A minimal splash/base theme. The real UI is driven by Compose for TV
+      (see ui/theme/Theme.kt); this only styles the window before Compose loads.
+    -->
+    <style name="Theme.Dionysus" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:colorBackground">@color/background</item>
+    </style>
+</resources>

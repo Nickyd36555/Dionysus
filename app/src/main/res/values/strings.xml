@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Dionysus</string>
+
+    <!-- Home -->
+    <string name="home_title">Dionysus</string>
+    <string name="continue_watching">Continue Watching</string>
+    <string name="trending_now">Trending Now</string>
+    <string name="popular_movies">Popular Movies</string>
+    <string name="popular_shows">Popular Shows</string>
+    <string name="my_list">My List</string>
+    <string name="downloads">Downloads</string>
+
+    <!-- Actions -->
+    <string name="play">Play</string>
+    <string name="download">Download</string>
+    <string name="add_to_list">Add to My List</string>
+    <string name="remove_from_list">Remove from My List</string>
+    <string name="find_sources">Find Sources</string>
+    <string name="search">Search</string>
+    <string name="settings">Settings</string>
+
+    <!-- Settings -->
+    <string name="settings_debrid">Debrid Services</string>
+    <string name="settings_scrapers">Scrapers</string>
+    <string name="settings_players">Players</string>
+    <string name="settings_metadata">Metadata</string>
+    <string name="settings_home_layout">Customize Home</string>
+</resources>
