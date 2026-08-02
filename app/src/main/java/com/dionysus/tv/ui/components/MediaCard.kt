@@ -2,24 +2,33 @@
 
 package com.dionysus.tv.ui.components
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.dionysus.tv.core.model.MediaItem
-import androidx.tv.material3.Card
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -27,28 +36,35 @@ import androidx.tv.material3.Text
 private val CardWidth = 148.dp
 private val CardHeight = 222.dp
 
-/** A focusable poster card used across every content row. */
+/** A poster card that responds to both taps and D-pad focus. */
 @Composable
 fun MediaCard(
     item: MediaItem,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Card(
-        onClick = onClick,
-        modifier = modifier.width(CardWidth),
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val shape = RoundedCornerShape(10.dp)
+    Box(
+        modifier = modifier
+            .width(CardWidth)
+            .size(CardWidth, CardHeight)
+            .scale(if (focused) 1.06f else 1f)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .then(if (focused) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, shape) else Modifier)
+            .clickable(interactionSource = interaction, indication = null) { onClick() },
     ) {
-        Box(modifier = Modifier.size(CardWidth, CardHeight)) {
-            if (item.posterUrl != null) {
-                AsyncImage(
-                    model = item.posterUrl,
-                    contentDescription = item.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                PosterPlaceholder(item.title)
-            }
+        if (item.posterUrl != null) {
+            AsyncImage(
+                model = item.posterUrl,
+                contentDescription = item.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            PosterPlaceholder(item.title)
         }
     }
 }

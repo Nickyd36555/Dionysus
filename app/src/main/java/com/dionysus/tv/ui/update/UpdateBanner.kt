@@ -17,7 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.dionysus.tv.data.update.UpdateInfo
-import androidx.tv.material3.Button
+import com.dionysus.tv.ui.components.AppButton
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -62,9 +62,9 @@ fun UpdateBanner(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Button(onClick = onUpdate, enabled = !state.downloading) {
+        AppButton(onClick = onUpdate, enabled = !state.downloading) {
             Text(if (state.downloading) "Updating…" else "Update now")
         }
-        Button(onClick = onDismiss) { Text("Later") }
+        AppButton(onClick = onDismiss) { Text("Later") }
     }
 }

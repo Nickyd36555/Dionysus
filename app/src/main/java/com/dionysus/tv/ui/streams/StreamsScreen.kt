@@ -29,10 +29,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dionysus.tv.core.model.StreamSource
-import androidx.tv.material3.Button
+import com.dionysus.tv.ui.components.AppButton
+import com.dionysus.tv.ui.components.AppSurface
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 
 @Composable
@@ -93,10 +93,10 @@ fun StreamsScreen(
 
 @Composable
 private fun SourceRow(source: StreamSource, onPlay: () -> Unit, onDownload: () -> Unit) {
-    Surface(
+    AppSurface(
         onClick = onPlay,
         modifier = Modifier.fillMaxWidth(),
-        shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
+        shape = RoundedCornerShape(12.dp),
     ) {
         Row(
             modifier = Modifier
@@ -136,10 +136,10 @@ private fun SourceRow(source: StreamSource, onPlay: () -> Unit, onDownload: () -
                     modifier = Modifier.padding(end = 12.dp),
                 )
             }
-            Button(onClick = onPlay, modifier = Modifier.padding(end = 8.dp)) {
+            AppButton(onClick = onPlay, modifier = Modifier.padding(end = 8.dp)) {
                 Icon(Icons.Default.PlayArrow, contentDescription = "Play")
             }
-            Button(onClick = onDownload) {
+            AppButton(onClick = onDownload) {
                 Icon(Icons.Default.Download, contentDescription = "Download")
             }
         }

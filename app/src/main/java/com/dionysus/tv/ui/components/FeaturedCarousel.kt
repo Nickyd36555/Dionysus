@@ -26,7 +26,6 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.dionysus.tv.core.model.MediaItem
 import com.dionysus.tv.ui.theme.DionysusBackground
-import androidx.tv.material3.Button
 import androidx.tv.material3.Carousel
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
@@ -121,11 +120,11 @@ fun FeaturedCarousel(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.padding(top = 24.dp),
                 ) {
-                    Button(onClick = { onPlay(item) }) {
+                    AppButton(onClick = { onPlay(item) }) {
                         Icon(Icons.Default.PlayArrow, contentDescription = null)
                         Text("  Play")
                     }
-                    Button(onClick = { onDetails(item) }) {
+                    AppButton(onClick = { onDetails(item) }) {
                         Icon(Icons.Default.Info, contentDescription = null)
                         Text("  More Info")
                     }

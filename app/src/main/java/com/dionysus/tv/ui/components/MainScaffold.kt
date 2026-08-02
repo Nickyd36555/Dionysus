@@ -23,7 +23,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
-import androidx.tv.material3.ListItem
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.dionysus.tv.ui.navigation.TopLevelDestination
@@ -58,7 +57,7 @@ fun MainScaffold(
                 modifier = Modifier.padding(start = 12.dp, bottom = 16.dp),
             )
             TopLevelDestination.entries.forEach { dest ->
-                ListItem(
+                AppListItem(
                     selected = dest == selected,
                     onClick = { onSelect(dest) },
                     leadingContent = { Icon(iconFor(dest), contentDescription = dest.label) },

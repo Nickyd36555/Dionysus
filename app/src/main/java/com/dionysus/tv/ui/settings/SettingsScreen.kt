@@ -30,9 +30,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dionysus.tv.BuildConfig
 import com.dionysus.tv.player.ExternalPlayer
+import com.dionysus.tv.ui.components.AppButton
+import com.dionysus.tv.ui.components.AppListItem
 import com.dionysus.tv.ui.update.UpdateViewModel
-import androidx.tv.material3.Button
-import androidx.tv.material3.ListItem
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 
@@ -82,9 +82,9 @@ fun SettingsScreen(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (state.realDebridConnected) {
-                        Button(onClick = viewModel::disconnectRealDebrid) { Text("Disconnect") }
+                        AppButton(onClick = viewModel::disconnectRealDebrid) { Text("Disconnect") }
                     } else {
-                        Button(onClick = viewModel::connectRealDebrid) { Text("Connect Real-Debrid") }
+                        AppButton(onClick = viewModel::connectRealDebrid) { Text("Connect Real-Debrid") }
                     }
                 }
             }
@@ -137,7 +137,7 @@ fun SettingsScreen(
         // ---- Players -------------------------------------------------------
         item { SectionHeader("Preferred Player") }
         items(state.availablePlayers, key = { it.id }) { player ->
-            ListItem(
+            AppListItem(
                 selected = player.id == state.preferredPlayer,
                 onClick = { viewModel.setPreferredPlayer(player.id) },
                 headlineContent = { Text(player.displayName) },
@@ -176,11 +176,11 @@ fun SettingsScreen(
                     Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = updateViewModel::check, enabled = !updateState.checking) {
+                    AppButton(onClick = updateViewModel::check, enabled = !updateState.checking) {
                         Text(if (updateState.checking) "Checking…" else "Check for Updates")
                     }
                     if (updateState.isAvailable) {
-                        Button(onClick = updateViewModel::update, enabled = !updateState.downloading) {
+                        AppButton(onClick = updateViewModel::update, enabled = !updateState.downloading) {
                             Text(if (updateState.downloading) "Updating… ${(updateState.progress * 100).toInt()}%" else "Update now")
                         }
                     }
@@ -212,7 +212,7 @@ private fun ToggleRow(label: String, enabled: Boolean, onToggle: (Boolean) -> Un
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )
-        Button(onClick = { onToggle(!enabled) }, modifier = Modifier.width(120.dp)) {
+        AppButton(onClick = { onToggle(!enabled) }, modifier = Modifier.width(120.dp)) {
             Text(if (enabled) "On" else "Off")
         }
     }

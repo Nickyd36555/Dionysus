@@ -33,10 +33,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.dionysus.tv.core.model.Episode
 import com.dionysus.tv.core.model.MediaType
+import com.dionysus.tv.ui.components.AppButton
+import com.dionysus.tv.ui.components.AppListItem
 import com.dionysus.tv.ui.theme.DionysusBackground
-import androidx.tv.material3.Button
 import androidx.tv.material3.Icon
-import androidx.tv.material3.ListItem
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 
@@ -117,12 +117,12 @@ fun DetailScreen(
                         modifier = Modifier.padding(top = 20.dp),
                     ) {
                         if (item.type == MediaType.MOVIE) {
-                            Button(onClick = { onFindSources(item.id, null, null) }) {
+                            AppButton(onClick = { onFindSources(item.id, null, null) }) {
                                 Icon(Icons.Default.PlayArrow, contentDescription = null)
                                 Text("  Find Sources")
                             }
                         }
-                        Button(onClick = viewModel::toggleFavorite) {
+                        AppButton(onClick = viewModel::toggleFavorite) {
                             Icon(
                                 imageVector = if (state.isFavorite) Icons.Default.Check else Icons.Default.Add,
                                 contentDescription = null,
@@ -147,7 +147,7 @@ fun DetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     items(state.seasons, key = { it.seasonNumber }) { season ->
-                        Button(onClick = { viewModel.selectSeason(season.seasonNumber) }) {
+                        AppButton(onClick = { viewModel.selectSeason(season.seasonNumber) }) {
                             Text(season.name.ifBlank { "Season ${season.seasonNumber}" })
                         }
                     }
@@ -166,7 +166,7 @@ fun DetailScreen(
 
 @Composable
 private fun EpisodeItem(episode: Episode, onClick: () -> Unit) {
-    ListItem(
+    AppListItem(
         selected = false,
         onClick = onClick,
         headlineContent = {

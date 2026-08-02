@@ -29,10 +29,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dionysus.tv.data.local.DownloadStatus
 import com.dionysus.tv.data.local.entity.DownloadEntity
-import androidx.tv.material3.Button
+import com.dionysus.tv.ui.components.AppButton
+import com.dionysus.tv.ui.components.AppSurface
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 
 @Composable
@@ -93,10 +93,10 @@ private fun DownloadRow(
         (download.bytesDownloaded.toFloat() / download.totalBytes).coerceIn(0f, 1f)
     } else 0f
 
-    Surface(
+    AppSurface(
         onClick = { if (status == DownloadStatus.COMPLETED) onPlay() },
         modifier = Modifier.fillMaxWidth(),
-        shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
+        shape = RoundedCornerShape(12.dp),
     ) {
         Row(
             modifier = Modifier
@@ -123,17 +123,17 @@ private fun DownloadRow(
             }
             when (status) {
                 DownloadStatus.COMPLETED -> {
-                    Button(onClick = onPlay, modifier = Modifier.padding(end = 8.dp)) {
+                    AppButton(onClick = onPlay, modifier = Modifier.padding(end = 8.dp)) {
                         Icon(Icons.Default.PlayArrow, contentDescription = "Play")
                     }
-                    Button(onClick = onDelete) {
+                    AppButton(onClick = onDelete) {
                         Icon(Icons.Default.Delete, contentDescription = "Delete")
                     }
                 }
                 DownloadStatus.DOWNLOADING, DownloadStatus.QUEUED, DownloadStatus.RESOLVING ->
-                    Button(onClick = onCancel) { Text("Cancel") }
+                    AppButton(onClick = onCancel) { Text("Cancel") }
                 else ->
-                    Button(onClick = onDelete) {
+                    AppButton(onClick = onDelete) {
                         Icon(Icons.Default.Delete, contentDescription = "Remove")
                     }
             }
