@@ -99,6 +99,14 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    /** Load an addon's URL into the input so it can be edited and re-installed. */
+    fun editAddon(transportUrl: String) {
+        _state.value = _state.value.copy(
+            addonUrlInput = transportUrl,
+            statusMessage = "Loaded URL above — edit it and press Install (then Remove the old one if the URL changed).",
+        )
+    }
+
     private suspend fun loadInitial() {
         val enabled = settings.enabledScraperIds.first()
         _state.value = _state.value.copy(

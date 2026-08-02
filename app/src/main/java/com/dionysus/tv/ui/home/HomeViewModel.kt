@@ -92,8 +92,7 @@ class HomeViewModel @Inject constructor(
                     val key = "${addon.transportUrl}|${def.type}|${def.id}"
                     val items = addonCatalogCache.getOrPut(key) { addons.catalog(addon, def) }
                     if (items.isNotEmpty()) {
-                        val title = def.name.ifBlank { "${addon.manifest.name} · ${def.type}" }
-                        add(HomeRowUi("addon:$key", title, items))
+                        add(HomeRowUi("addon:$key", catalogTitle(addon.manifest.name, def.name, def.type), items))
                     }
                 }
             }
@@ -108,6 +107,17 @@ class HomeViewModel @Inject constructor(
             isLoading = false,
             error = if (rows.isEmpty() && featured.isEmpty()) lastMetadataError else null,
         )
+    }
+
+    /** Distinct, readable title per catalog so movie/series rows don't collide. */
+    private fun catalogTitle(addonName: String, catalogName: String, type: String): String {
+        val base = catalogName.ifBlank { addonName }
+        val typeLabel = when (type.lowercase()) {
+            "movie", "movies" -> "Movies"
+            "series", "tv", "show", "shows" -> "Shows"
+            else -> type.replaceFirstChar { it.uppercase() }
+        }
+        return if (base.contains(typeLabel, ignoreCase = true)) base else "$base · $typeLabel"
     }
 
     private suspend fun catalog(kind: HomeRowKind): List<MediaItem> {

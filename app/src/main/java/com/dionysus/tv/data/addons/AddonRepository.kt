@@ -6,6 +6,9 @@ import com.dionysus.tv.core.model.MediaItem
 import com.dionysus.tv.core.model.MediaType
 import com.dionysus.tv.data.local.dao.AddonDao
 import com.dionysus.tv.data.local.entity.InstalledAddonEntity
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -77,10 +80,39 @@ class AddonRepository @Inject constructor(
     /** Fetch a catalog's items and map them to domain [MediaItem]s. */
     suspend fun catalog(addon: Addon, def: AddonCatalogDef): List<MediaItem> = try {
         val url = "${addon.base}catalog/${def.type}/${def.id}.json"
-        api.catalog(url).metas.map { it.toMediaItem() }
+        val items = api.catalog(url).metas.map { it.toMediaItem() }
+        enrichPosters(items)
     } catch (t: Throwable) {
         Log.w(TAG, "Catalog fetch failed for ${addon.manifest.name}/${def.id}", t)
         emptyList()
+    }
+
+    /**
+     * Some catalog addons return "thin" items (id/type only). When posters are
+     * missing, fill title/poster/etc. from Cinemeta (IMDb) so cards render.
+     */
+    private suspend fun enrichPosters(items: List<MediaItem>): List<MediaItem> = coroutineScope {
+        if (items.none { it.posterUrl == null }) return@coroutineScope items
+        val head = items.take(ENRICH_LIMIT)
+        val enriched = head.map { item ->
+            async {
+                val imdb = item.imdbId
+                if (item.posterUrl != null || imdb == null) return@async item
+                val type = if (item.type == MediaType.TV_SHOW) "series" else "movie"
+                val meta = runCatching {
+                    api.meta("${AddonApi.CINEMETA_BASE}meta/$type/$imdb.json").meta
+                }.getOrNull() ?: return@async item
+                item.copy(
+                    title = item.title.ifBlank { meta.name },
+                    overview = item.overview.ifBlank { meta.description },
+                    posterUrl = meta.poster,
+                    backdropUrl = item.backdropUrl ?: meta.background,
+                    year = item.year ?: meta.releaseInfo?.take(4)?.toIntOrNull(),
+                    rating = item.rating ?: meta.imdbRating?.toDoubleOrNull(),
+                )
+            }
+        }.awaitAll()
+        enriched + items.drop(ENRICH_LIMIT)
     }
 
     /**
@@ -100,6 +132,7 @@ class AddonRepository @Inject constructor(
 
     companion object {
         private const val TAG = "AddonRepository"
+        private const val ENRICH_LIMIT = 40
     }
 }
 

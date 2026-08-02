@@ -174,6 +174,10 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                AppButton(
+                    onClick = { viewModel.editAddon(addon.transportUrl) },
+                    modifier = Modifier.padding(end = 8.dp),
+                ) { Text("Edit") }
                 AppButton(onClick = { viewModel.removeAddon(addon.transportUrl) }) { Text("Remove") }
             }
         }

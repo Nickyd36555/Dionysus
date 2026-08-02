@@ -55,15 +55,7 @@ fun MainScaffold(
                 .padding(horizontal = 12.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Image(
-                painter = painterResource(R.drawable.logo_wordmark),
-                contentDescription = "Dionysus Streaming",
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(76.dp)
-                    .padding(start = 4.dp, bottom = 12.dp),
-            )
+            Spacer(Modifier.height(8.dp))
             TopLevelDestination.entries.forEach { dest ->
                 AppListItem(
                     selected = dest == selected,
@@ -73,7 +65,17 @@ fun MainScaffold(
                     modifier = Modifier.padding(vertical = 2.dp),
                 )
             }
-            Spacer(Modifier.height(8.dp))
+            // Push the wordmark to the bottom of the rail (transparent, no box).
+            Spacer(Modifier.weight(1f))
+            Image(
+                painter = painterResource(R.drawable.logo_wordmark),
+                contentDescription = "Dionysus Streaming",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(64.dp)
+                    .padding(bottom = 8.dp),
+            )
         }
 
         Box(modifier = Modifier
