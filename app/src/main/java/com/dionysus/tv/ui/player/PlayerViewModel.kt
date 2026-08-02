@@ -6,6 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.dionysus.tv.core.model.MediaType
 import com.dionysus.tv.data.local.LibraryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -19,11 +22,21 @@ class PlayerViewModel @Inject constructor(
     val title: String = savedStateHandle.get<String>("title").orEmpty()
     private val progressId: String = savedStateHandle.get<String>("progressId").orEmpty()
 
+    /** Resume position in ms; null until loaded, then 0 or the saved point. */
+    private val _startPositionMs = MutableStateFlow<Long?>(null)
+    val startPositionMs: StateFlow<Long?> = _startPositionMs.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            _startPositionMs.value = if (progressId.isBlank()) 0L else library.resumePosition(progressId)
+        }
+    }
+
     /** Persist the resume point so the title reappears in Continue Watching. */
     fun saveProgress(positionMs: Long, durationMs: Long) {
         if (progressId.isBlank() || durationMs <= 0) return
         val mediaId = if (progressId.contains(":s")) progressId.substringBefore(":s") else progressId
-        val type = if (mediaId.contains(":tv:")) MediaType.TV_SHOW else MediaType.MOVIE
+        val type = if (mediaId.contains(":tv:") || mediaId.contains(":series:")) MediaType.TV_SHOW else MediaType.MOVIE
         viewModelScope.launch {
             library.saveProgress(
                 id = progressId,

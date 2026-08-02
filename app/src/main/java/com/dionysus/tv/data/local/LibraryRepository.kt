@@ -46,6 +46,9 @@ class LibraryRepository @Inject constructor(
 
     fun continueWatching(): Flow<List<WatchProgressEntity>> = watchProgressDao.observeRecent()
 
+    /** Saved resume position (ms) for a movie/episode id, or 0 if none. */
+    suspend fun resumePosition(id: String): Long = watchProgressDao.get(id)?.positionMs ?: 0L
+
     suspend fun saveProgress(
         id: String,
         mediaId: String,

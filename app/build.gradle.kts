@@ -31,8 +31,8 @@ android {
         targetSdk = 34
         // CI overrides these from the pushed tag so the APK's version matches
         // the GitHub Release the in-app updater compares against.
-        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 205
-        versionName = System.getenv("VERSION_NAME") ?: "0.2.5"
+        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 206
+        versionName = System.getenv("VERSION_NAME") ?: "0.2.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -40,6 +40,12 @@ android {
         // Self-update source: the GitHub repo whose latest release is checked.
         buildConfigField("String", "UPDATE_OWNER", "\"Nickyd36555\"")
         buildConfigField("String", "UPDATE_REPO", "\"Dionysus\"")
+
+        // Limit LibVLC native libs to the ABIs we target (real TVs + emulator)
+        // to keep the APK from ballooning across every architecture.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
     }
 
     signingConfigs {
@@ -136,12 +142,10 @@ dependencies {
     // Image loading
     implementation(libs.coil.compose)
 
-    // Media / playback
-    implementation(libs.media3.exoplayer)
-    implementation(libs.media3.exoplayer.hls)
-    implementation(libs.media3.exoplayer.dash)
-    implementation(libs.media3.ui)
-    implementation(libs.media3.session)
+    // Media / playback — LibVLC bundles a full set of software audio/video
+    // decoders (HEVC, AC3/EAC3/DTS/TrueHD, VP9, AV1, …) so it plays formats
+    // the device's own decoders can't.
+    implementation(libs.libvlc.all)
 
     // Local persistence
     implementation(libs.androidx.room.runtime)

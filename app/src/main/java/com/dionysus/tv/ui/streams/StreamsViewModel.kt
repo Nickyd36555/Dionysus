@@ -29,6 +29,8 @@ data class InternalPlayback(val url: String, val title: String, val progressId: 
 
 data class StreamsUiState(
     val title: String = "",
+    val backdropUrl: String? = null,
+    val posterUrl: String? = null,
     val sources: List<StreamSource> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null,
@@ -71,7 +73,11 @@ class StreamsViewModel @Inject constructor(
                 return@launch
             }
             mediaItem = item
-            _state.value = _state.value.copy(title = item.title.ifBlank { "Sources" })
+            _state.value = _state.value.copy(
+                title = item.title.ifBlank { "Sources" },
+                backdropUrl = item.backdropUrl,
+                posterUrl = item.posterUrl,
+            )
 
             if (item.imdbId == null && stremioContentId == null) {
                 _state.value = _state.value.copy(

@@ -21,16 +21,19 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.height
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.dionysus.tv.core.model.StreamSource
 import com.dionysus.tv.ui.components.AppButton
-import com.dionysus.tv.ui.components.AppSurface
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -72,8 +75,8 @@ fun StreamsScreen(
         }
 
         when {
-            state.isLoading -> Centered("Searching sources…")
-            state.resolvingTitle != null -> Centered("Resolving \"${state.resolvingTitle}\"…")
+            state.isLoading -> LoadingWithArt(state, "Searching sources for \"${state.title}\"…")
+            state.resolvingTitle != null -> LoadingWithArt(state, "Resolving \"${state.resolvingTitle}\"…")
             state.error != null -> Centered(state.error!!)
             else -> LazyColumn(
                 contentPadding = PaddingValues(top = 24.dp, bottom = 24.dp),
@@ -93,55 +96,87 @@ fun StreamsScreen(
 
 @Composable
 private fun SourceRow(source: StreamSource, onPlay: () -> Unit, onDownload: () -> Unit) {
-    AppSurface(
-        onClick = onPlay,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        QualityBadge(source.quality.label)
+        Column(modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {
+            Text(
+                text = source.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = buildString {
+                    append(source.provider)
+                    source.sizeBytes?.let { append("  •  ${formatSize(it)}") }
+                    source.seeders?.let { append("  •  $it seeders") }
+                    if (source.cachedOn.isNotEmpty()) {
+                        append("  •  cached: ${source.cachedOn.joinToString { it.displayName }}")
+                    }
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (source.cachedOn.isNotEmpty()) {
+            Icon(
+                imageVector = Icons.Default.Bolt,
+                contentDescription = "Cached",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(end = 12.dp),
+            )
+        }
+        // Two distinct, focusable actions so Play and Download are both reachable.
+        AppButton(onClick = onPlay, modifier = Modifier.padding(end = 8.dp)) {
+            Icon(Icons.Default.PlayArrow, contentDescription = null)
+            Text("  Play")
+        }
+        AppButton(onClick = onDownload) {
+            Icon(Icons.Default.Download, contentDescription = null)
+            Text("  Download")
+        }
+    }
+}
+
+@Composable
+private fun LoadingWithArt(state: StreamsUiState, message: String) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        state.backdropUrl?.let { url ->
+            AsyncImage(
+                model = url,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().alpha(0.25f),
+            )
+        }
+        Column(
+            modifier = Modifier.align(Alignment.Center),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            QualityBadge(source.quality.label)
-            Column(modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {
-                Text(
-                    text = source.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = buildString {
-                        append(source.provider)
-                        source.sizeBytes?.let { append("  •  ${formatSize(it)}") }
-                        source.seeders?.let { append("  •  $it seeders") }
-                        if (source.cachedOn.isNotEmpty()) {
-                            append("  •  cached: ${source.cachedOn.joinToString { it.displayName }}")
-                        }
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+            state.posterUrl?.let { poster ->
+                AsyncImage(
+                    model = poster,
+                    contentDescription = state.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.height(200.dp).clip(RoundedCornerShape(12.dp)),
                 )
             }
-            if (source.cachedOn.isNotEmpty()) {
-                Icon(
-                    imageVector = Icons.Default.Bolt,
-                    contentDescription = "Cached",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(end = 12.dp),
-                )
-            }
-            AppButton(onClick = onPlay, modifier = Modifier.padding(end = 8.dp)) {
-                Icon(Icons.Default.PlayArrow, contentDescription = "Play")
-            }
-            AppButton(onClick = onDownload) {
-                Icon(Icons.Default.Download, contentDescription = "Download")
-            }
+            Text(
+                text = message,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
         }
     }
 }

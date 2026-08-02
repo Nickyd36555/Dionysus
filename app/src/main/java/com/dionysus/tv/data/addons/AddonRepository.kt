@@ -132,7 +132,7 @@ class AddonRepository @Inject constructor(
 
     companion object {
         private const val TAG = "AddonRepository"
-        private const val ENRICH_LIMIT = 40
+        private const val ENRICH_LIMIT = 20
     }
 }
 

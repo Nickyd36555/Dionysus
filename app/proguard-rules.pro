@@ -16,5 +16,6 @@
 -dontwarn retrofit2.**
 -keepattributes Signature, Exceptions
 
-# Media3
--dontwarn androidx.media3.**
+# LibVLC (JNI-backed; keep everything it needs at runtime)
+-keep class org.videolan.libvlc.** { *; }
+-dontwarn org.videolan.libvlc.**

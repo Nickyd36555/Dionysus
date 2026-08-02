@@ -16,6 +16,9 @@ import com.dionysus.tv.data.local.entity.WatchProgressEntity
 import com.dionysus.tv.data.metadata.MetadataRepository
 import com.dionysus.tv.download.DownloadRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -72,34 +75,50 @@ class HomeViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
 
-    private suspend fun rebuild(snapshot: Snapshot) {
-        val builtIn = snapshot.rows
-            .filter { it.enabled }
-            .sortedBy { it.position }
-            .mapNotNull { row ->
-                val items = when (row.kind) {
-                    HomeRowKind.CONTINUE_WATCHING -> snapshot.continueWatching.map { it.toMediaItem() }
-                    HomeRowKind.MY_LIST -> snapshot.favorites
-                    HomeRowKind.DOWNLOADS -> snapshot.downloads.map { it.toMediaItem() }
-                    else -> catalog(row.kind)
-                }
-                if (items.isEmpty()) null else HomeRowUi(row.id, row.title, items)
-            }
+    private suspend fun rebuild(snapshot: Snapshot) = coroutineScope {
+        val enabledRows = snapshot.rows.filter { it.enabled }.sortedBy { it.position }
 
-        val addonRows = buildList {
-            for (addon in snapshot.addons.filter { it.providesCatalog }) {
-                for (def in addon.manifest.catalogs) {
-                    val key = "${addon.transportUrl}|${def.type}|${def.id}"
-                    val items = addonCatalogCache.getOrPut(key) { addons.catalog(addon, def) }
-                    if (items.isNotEmpty()) {
-                        add(HomeRowUi("addon:$key", catalogTitle(addon.manifest.name, def.name, def.type), items))
-                    }
-                }
+        // Fire every network fetch in parallel so first paint is bounded by the
+        // slowest single call, not the sum of them.
+        val kindsToFetch = (enabledRows.map { it.kind } + HomeRowKind.TRENDING)
+            .filter { it in NETWORK_KINDS }
+            .distinct()
+        kindsToFetch.map { kind -> async { catalog(kind) } }.awaitAll()
+
+        val catalogDefs = snapshot.addons
+            .filter { it.providesCatalog }
+            .flatMap { addon -> addon.manifest.catalogs.map { addon to it } }
+        val addonFetched = catalogDefs.map { (addon, def) ->
+            async {
+                val key = "${addon.transportUrl}|${def.type}|${def.id}"
+                val items = addonCatalogCache[key] ?: addons.catalog(addon, def).also { addonCatalogCache[key] = it }
+                Triple(addon, def, items)
             }
+        }.awaitAll()
+
+        val builtIn = enabledRows.mapNotNull { row ->
+            val items = when (row.kind) {
+                HomeRowKind.CONTINUE_WATCHING -> snapshot.continueWatching.map { it.toMediaItem() }
+                HomeRowKind.MY_LIST -> snapshot.favorites
+                HomeRowKind.DOWNLOADS -> snapshot.downloads.map { it.toMediaItem() }
+                else -> catalog(row.kind)
+            }
+            if (items.isEmpty()) null else HomeRowUi(row.id, row.title, items)
         }
 
+        val addonRows = addonFetched
+            .filter { it.third.isNotEmpty() }
+            .map { (addon, def, items) ->
+                HomeRowUi(
+                    "addon:${addon.transportUrl}|${def.type}|${def.id}",
+                    catalogTitle(addon.manifest.name, def.name, def.type),
+                    items,
+                )
+            }
+
         val rows = builtIn + addonRows
-        val featured = catalog(HomeRowKind.TRENDING).ifEmpty { addonRows.firstOrNull()?.items.orEmpty() }
+        val featured = (catalogCache[HomeRowKind.TRENDING] ?: emptyList())
+            .ifEmpty { addonRows.firstOrNull()?.items.orEmpty() }
 
         _state.value = HomeUiState(
             featured = featured.take(8),
@@ -152,4 +171,13 @@ class HomeViewModel @Inject constructor(
         title = title,
         posterUrl = posterUrl,
     )
+
+    companion object {
+        private val NETWORK_KINDS = setOf(
+            HomeRowKind.TRENDING,
+            HomeRowKind.POPULAR_MOVIES,
+            HomeRowKind.POPULAR_SHOWS,
+            HomeRowKind.TOP_RATED_MOVIES,
+        )
+    }
 }

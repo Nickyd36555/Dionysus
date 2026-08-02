@@ -15,6 +15,25 @@
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
+    <!--
+      Android 11+ package visibility: without this, the app cannot detect other
+      installed apps, so external players never appear on devices like the
+      NVIDIA Shield. Declare the known players plus a generic video-view intent.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="video/*" />
+        </intent>
+        <package android:name="org.videolan.vlc" />
+        <package android:name="com.newin.nplayer.pro" />
+        <package android:name="com.newin.nplayer" />
+        <package android:name="com.mxtech.videoplayer.pro" />
+        <package android:name="com.mxtech.videoplayer.ad" />
+        <package android:name="com.brouken.player" />
+        <package android:name="org.xbmc.kodi" />
+    </queries>
+
     <!-- Android TV declares no touchscreen and requires leanback. -->
     <uses-feature
         android:name="android.hardware.touchscreen"
