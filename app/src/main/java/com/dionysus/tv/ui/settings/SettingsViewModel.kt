@@ -7,6 +7,7 @@ import com.dionysus.tv.core.model.DebridProvider
 import com.dionysus.tv.core.model.HomeRow
 import com.dionysus.tv.data.addons.Addon
 import com.dionysus.tv.data.addons.AddonRepository
+import com.dionysus.tv.data.backup.BackupRepository
 import com.dionysus.tv.data.debrid.DebridRepository
 import com.dionysus.tv.data.debrid.realdebrid.RealDebridAuth
 import com.dionysus.tv.data.debrid.realdebrid.RdDeviceCode
@@ -45,6 +46,8 @@ data class SettingsUiState(
     val homeRows: List<HomeRow> = emptyList(),
     val addons: List<Addon> = emptyList(),
     val addonUrlInput: String = "",
+    val syncCode: String? = null,
+    val importCodeInput: String = "",
 )
 
 @HiltViewModel
@@ -56,6 +59,7 @@ class SettingsViewModel @Inject constructor(
     private val homeLayout: HomeLayoutRepository,
     private val playerLauncher: PlayerLauncher,
     private val addonRepository: AddonRepository,
+    private val backup: BackupRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SettingsUiState())
@@ -96,6 +100,40 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             addonRepository.remove(transportUrl)
             _state.value = _state.value.copy(statusMessage = "Add-on removed.")
+        }
+    }
+
+    fun generateSyncCode() {
+        viewModelScope.launch {
+            val code = backup.export()
+            _state.value = _state.value.copy(
+                syncCode = code,
+                statusMessage = "Sync code ready — copy it onto your other device and paste it under Restore.",
+            )
+        }
+    }
+
+    fun setImportCode(code: String) {
+        _state.value = _state.value.copy(importCodeInput = code)
+    }
+
+    fun restoreFromCode() {
+        val code = _state.value.importCodeInput.trim()
+        if (code.isEmpty()) return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(statusMessage = "Restoring setup…")
+            when (val result = backup.import(code)) {
+                is DataResult.Success -> {
+                    loadInitial()
+                    _state.value = _state.value.copy(
+                        importCodeInput = "",
+                        statusMessage = "Setup restored (${result.data} add-ons). Your connections are ready.",
+                    )
+                }
+                is DataResult.Error -> _state.value = _state.value.copy(
+                    statusMessage = "Couldn't restore: ${result.message}",
+                )
+            }
         }
     }
 

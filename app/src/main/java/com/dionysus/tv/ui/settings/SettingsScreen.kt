@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -64,6 +65,42 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(top = 8.dp),
                 )
+            }
+        }
+
+        // ---- Sign in / transfer -------------------------------------------
+        item { SectionHeader("Sign in / Transfer (Sync code)") }
+        item {
+            Column(
+                modifier = Modifier.fillMaxWidth(0.85f),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    "Carry all your connections to another device: generate a code here, then paste it under Restore on the other device.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                AppButton(onClick = viewModel::generateSyncCode) { Text("Generate sync code") }
+                state.syncCode?.let { code ->
+                    SelectionContainer {
+                        Text(
+                            text = code,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(12.dp),
+                        )
+                    }
+                }
+                SettingTextField(
+                    label = "Restore: paste a sync code from another device",
+                    value = state.importCodeInput,
+                    onValueChange = viewModel::setImportCode,
+                )
+                AppButton(onClick = viewModel::restoreFromCode) { Text("Restore setup") }
             }
         }
 
