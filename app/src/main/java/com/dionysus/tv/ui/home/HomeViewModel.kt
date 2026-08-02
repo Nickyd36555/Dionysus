@@ -7,6 +7,8 @@ import com.dionysus.tv.core.model.HomeRow
 import com.dionysus.tv.core.model.HomeRowKind
 import com.dionysus.tv.core.model.MediaItem
 import com.dionysus.tv.core.model.MediaType
+import com.dionysus.tv.data.addons.Addon
+import com.dionysus.tv.data.addons.AddonRepository
 import com.dionysus.tv.data.local.HomeLayoutRepository
 import com.dionysus.tv.data.local.LibraryRepository
 import com.dionysus.tv.data.local.entity.DownloadEntity
@@ -38,13 +40,14 @@ class HomeViewModel @Inject constructor(
     private val library: LibraryRepository,
     private val downloads: DownloadRepository,
     private val homeLayout: HomeLayoutRepository,
+    private val addons: AddonRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
 
-    // Network-backed rows are cached so local-library changes don't re-fetch.
     private val catalogCache = mutableMapOf<HomeRowKind, List<MediaItem>>()
+    private val addonCatalogCache = mutableMapOf<String, List<MediaItem>>()
     private var lastMetadataError: String? = null
 
     private data class Snapshot(
@@ -52,6 +55,7 @@ class HomeViewModel @Inject constructor(
         val favorites: List<MediaItem>,
         val continueWatching: List<WatchProgressEntity>,
         val downloads: List<DownloadEntity>,
+        val addons: List<Addon>,
     )
 
     init {
@@ -62,22 +66,14 @@ class HomeViewModel @Inject constructor(
             library.favorites(),
             library.continueWatching(),
             downloads.downloads(),
-        ) { rows, favs, cw, dl -> Snapshot(rows, favs, cw, dl) }
+            addons.installedAddons,
+        ) { rows, favs, cw, dl, adns -> Snapshot(rows, favs, cw, dl, adns) }
             .onEach { rebuild(it) }
             .launchIn(viewModelScope)
     }
 
-    fun refresh() {
-        catalogCache.clear()
-        viewModelScope.launch {
-            val current = _state.value
-            _state.value = current.copy(isLoading = true)
-        }
-    }
-
     private suspend fun rebuild(snapshot: Snapshot) {
-        val featuredSource = catalog(HomeRowKind.TRENDING)
-        val rows = snapshot.rows
+        val builtIn = snapshot.rows
             .filter { it.enabled }
             .sortedBy { it.position }
             .mapNotNull { row ->
@@ -90,11 +86,27 @@ class HomeViewModel @Inject constructor(
                 if (items.isEmpty()) null else HomeRowUi(row.id, row.title, items)
             }
 
+        val addonRows = buildList {
+            for (addon in snapshot.addons.filter { it.providesCatalog }) {
+                for (def in addon.manifest.catalogs) {
+                    val key = "${addon.transportUrl}|${def.type}|${def.id}"
+                    val items = addonCatalogCache.getOrPut(key) { addons.catalog(addon, def) }
+                    if (items.isNotEmpty()) {
+                        val title = def.name.ifBlank { "${addon.manifest.name} · ${def.type}" }
+                        add(HomeRowUi("addon:$key", title, items))
+                    }
+                }
+            }
+        }
+
+        val rows = builtIn + addonRows
+        val featured = catalog(HomeRowKind.TRENDING).ifEmpty { addonRows.firstOrNull()?.items.orEmpty() }
+
         _state.value = HomeUiState(
-            featured = featuredSource.take(8),
+            featured = featured.take(8),
             rows = rows,
             isLoading = false,
-            error = if (rows.isEmpty() && featuredSource.isEmpty()) lastMetadataError else null,
+            error = if (rows.isEmpty() && featured.isEmpty()) lastMetadataError else null,
         )
     }
 

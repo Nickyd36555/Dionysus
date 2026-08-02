@@ -3,6 +3,7 @@ package com.dionysus.tv.core.di
 import android.content.Context
 import androidx.room.Room
 import com.dionysus.tv.data.local.DionysusDatabase
+import com.dionysus.tv.data.local.dao.AddonDao
 import com.dionysus.tv.data.local.dao.DownloadDao
 import com.dionysus.tv.data.local.dao.FavoriteDao
 import com.dionysus.tv.data.local.dao.HomeRowDao
@@ -29,4 +30,5 @@ object DatabaseModule {
     @Provides fun provideWatchProgressDao(db: DionysusDatabase): WatchProgressDao = db.watchProgressDao()
     @Provides fun provideDownloadDao(db: DionysusDatabase): DownloadDao = db.downloadDao()
     @Provides fun provideHomeRowDao(db: DionysusDatabase): HomeRowDao = db.homeRowDao()
+    @Provides fun provideAddonDao(db: DionysusDatabase): AddonDao = db.addonDao()
 }

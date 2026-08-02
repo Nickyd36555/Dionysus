@@ -131,6 +131,6 @@ class SettingsRepository @Inject constructor(
     companion object {
         const val DEFAULT_TORRENTIO_URL = "https://torrentio.strem.fun/"
         const val DEFAULT_PLAYER = "internal"
-        val DEFAULT_SCRAPERS = setOf("torrentio")
+        val DEFAULT_SCRAPERS = setOf("torrentio", "stremio_addons")
     }
 }

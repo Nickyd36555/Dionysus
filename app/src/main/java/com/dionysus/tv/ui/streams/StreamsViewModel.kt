@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.dionysus.tv.core.model.MediaItem
 import com.dionysus.tv.core.model.MediaType
 import com.dionysus.tv.core.model.StreamSource
+import com.dionysus.tv.data.addons.AddonRepository
+import com.dionysus.tv.data.addons.toMediaItem
 import com.dionysus.tv.data.debrid.DebridRepository
 import com.dionysus.tv.data.metadata.MetadataRepository
 import com.dionysus.tv.data.scraper.ScraperRepository
@@ -38,6 +40,7 @@ data class StreamsUiState(
 class StreamsViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val metadata: MetadataRepository,
+    private val addons: AddonRepository,
     private val scrapers: ScraperRepository,
     private val debrid: DebridRepository,
     private val downloads: DownloadRepository,
@@ -56,6 +59,7 @@ class StreamsViewModel @Inject constructor(
     val playback: StateFlow<InternalPlayback?> = _playback.asStateFlow()
 
     private var mediaItem: MediaItem? = null
+    private var stremioContentId: String? = null
 
     init { load() }
 
@@ -67,12 +71,12 @@ class StreamsViewModel @Inject constructor(
                 return@launch
             }
             mediaItem = item
-            _state.value = _state.value.copy(title = item.title)
+            _state.value = _state.value.copy(title = item.title.ifBlank { "Sources" })
 
-            if (item.imdbId == null) {
+            if (item.imdbId == null && stremioContentId == null) {
                 _state.value = _state.value.copy(
                     isLoading = false,
-                    error = "No IMDb id available for this title, so scrapers can't find sources.",
+                    error = "No id available for this title, so scrapers can't find sources.",
                 )
                 return@launch
             }
@@ -83,6 +87,7 @@ class StreamsViewModel @Inject constructor(
                 year = item.year,
                 imdbId = item.imdbId,
                 tmdbId = item.tmdbId,
+                stremioId = stremioContentId,
                 season = season,
                 episode = episode,
             )
@@ -156,12 +161,27 @@ class StreamsViewModel @Inject constructor(
         if (season != null && episode != null) "$mediaId:s${season}e${episode}" else mediaId
 
     private suspend fun resolveItem(): MediaItem? {
-        val parts = mediaId.split(":")
-        if (parts.size != 3 || parts[0] != "tmdb") return null
-        val tmdbId = parts[2].toIntOrNull() ?: return null
-        return when (parts[1]) {
-            "tv" -> metadata.tvDetail(tmdbId).getOrNull()?.first
-            else -> metadata.movieDetail(tmdbId).getOrNull()
+        val parts = mediaId.split(":", limit = 3)
+        if (parts.size < 3) return null
+        return when (parts[0]) {
+            "stremio" -> {
+                val stremType = parts[1]
+                val sid = parts[2]
+                stremioContentId = sid
+                val meta = addons.meta(stremType, sid)
+                meta?.toMediaItem() ?: MediaItem(
+                    id = mediaId,
+                    type = if (stremType == "series") MediaType.TV_SHOW else MediaType.MOVIE,
+                    title = "Selected title",
+                    imdbId = Regex("tt\\d+").find(sid)?.value,
+                )
+            }
+            "tmdb" -> {
+                val tmdbId = parts[2].toIntOrNull() ?: return null
+                if (parts[1] == "tv") metadata.tvDetail(tmdbId).getOrNull()?.first
+                else metadata.movieDetail(tmdbId).getOrNull()
+            }
+            else -> null
         }
     }
 }

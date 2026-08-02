@@ -4,6 +4,7 @@ import com.dionysus.tv.data.debrid.premiumize.PremiumizeApi
 import com.dionysus.tv.data.debrid.realdebrid.RealDebridApi
 import com.dionysus.tv.data.debrid.realdebrid.RealDebridAuthApi
 import com.dionysus.tv.data.debrid.realdebrid.RealDebridAuthInterceptor
+import com.dionysus.tv.data.addons.AddonApi
 import com.dionysus.tv.data.debrid.realdebrid.RealDebridAuthenticator
 import com.dionysus.tv.data.metadata.TmdbApi
 import com.dionysus.tv.data.scraper.orion.OrionApi
@@ -74,6 +75,11 @@ object ApiModule {
     @Singleton
     fun provideGitHubApi(client: OkHttpClient, json: Json): GitHubApi =
         retrofit(GitHubApi.BASE_URL, client, json).create(GitHubApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideAddonApi(client: OkHttpClient, json: Json): AddonApi =
+        retrofit(AddonApi.BASE_URL, client, json).create(AddonApi::class.java)
 
     @Provides
     @Singleton

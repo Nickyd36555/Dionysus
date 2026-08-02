@@ -13,6 +13,8 @@ data class StreamQuery(
     val year: Int? = null,
     val imdbId: String? = null,
     val tmdbId: Int? = null,
+    /** Exact Stremio content id (e.g. "tt123" or a kitsu id), when known. */
+    val stremioId: String? = null,
     val season: Int? = null,
     val episode: Int? = null,
 )

@@ -51,6 +51,16 @@ data class DownloadEntity(
     val workId: String?,
 )
 
+/** A Stremio addon the user installed, stored with its raw manifest JSON. */
+@Entity(tableName = "addons")
+data class InstalledAddonEntity(
+    @PrimaryKey val transportUrl: String,
+    val name: String,
+    val manifestJson: String,
+    val position: Int,
+    val installedAt: Long,
+)
+
 /**
  * One configurable row on the home screen. The user can reorder, rename,
  * toggle, and add rows; this table is the source of truth for the layout.

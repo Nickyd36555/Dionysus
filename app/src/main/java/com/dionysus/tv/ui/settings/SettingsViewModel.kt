@@ -2,8 +2,11 @@ package com.dionysus.tv.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.dionysus.tv.core.model.DataResult
 import com.dionysus.tv.core.model.DebridProvider
 import com.dionysus.tv.core.model.HomeRow
+import com.dionysus.tv.data.addons.Addon
+import com.dionysus.tv.data.addons.AddonRepository
 import com.dionysus.tv.data.debrid.DebridRepository
 import com.dionysus.tv.data.debrid.realdebrid.RealDebridAuth
 import com.dionysus.tv.data.debrid.realdebrid.RdDeviceCode
@@ -40,6 +43,8 @@ data class SettingsUiState(
     val statusMessage: String? = null,
     val scrapers: List<ScraperInfo> = emptyList(),
     val homeRows: List<HomeRow> = emptyList(),
+    val addons: List<Addon> = emptyList(),
+    val addonUrlInput: String = "",
 )
 
 @HiltViewModel
@@ -50,6 +55,7 @@ class SettingsViewModel @Inject constructor(
     private val scraperRepository: ScraperRepository,
     private val homeLayout: HomeLayoutRepository,
     private val playerLauncher: PlayerLauncher,
+    private val addonRepository: AddonRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SettingsUiState())
@@ -60,6 +66,37 @@ class SettingsViewModel @Inject constructor(
         homeLayout.rows
             .onEach { rows -> _state.value = _state.value.copy(homeRows = rows) }
             .launchIn(viewModelScope)
+        addonRepository.installedAddons
+            .onEach { list -> _state.value = _state.value.copy(addons = list) }
+            .launchIn(viewModelScope)
+    }
+
+    fun setAddonUrl(url: String) {
+        _state.value = _state.value.copy(addonUrlInput = url)
+    }
+
+    fun installAddon() {
+        val url = _state.value.addonUrlInput.trim()
+        if (url.isEmpty()) return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(statusMessage = "Installing add-on…")
+            when (val result = addonRepository.install(url)) {
+                is DataResult.Success -> _state.value = _state.value.copy(
+                    addonUrlInput = "",
+                    statusMessage = "Added \"${result.data.manifest.name}\".",
+                )
+                is DataResult.Error -> _state.value = _state.value.copy(
+                    statusMessage = "Couldn't add add-on: ${result.message}",
+                )
+            }
+        }
+    }
+
+    fun removeAddon(transportUrl: String) {
+        viewModelScope.launch {
+            addonRepository.remove(transportUrl)
+            _state.value = _state.value.copy(statusMessage = "Add-on removed.")
+        }
     }
 
     private suspend fun loadInitial() {

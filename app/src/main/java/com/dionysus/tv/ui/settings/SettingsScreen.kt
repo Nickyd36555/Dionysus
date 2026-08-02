@@ -141,6 +141,43 @@ fun SettingsScreen(
             )
         }
 
+        // ---- Add-ons -------------------------------------------------------
+        item { SectionHeader("Add-ons (Stremio)") }
+        item {
+            Column(
+                modifier = Modifier.fillMaxWidth(0.7f),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                SettingTextField(
+                    label = "Add-on manifest URL (paste and install)",
+                    value = state.addonUrlInput,
+                    onValueChange = viewModel::setAddonUrl,
+                )
+                AppButton(onClick = viewModel::installAddon) { Text("Install add-on") }
+            }
+        }
+        items(state.addons, key = { it.transportUrl }) { addon ->
+            Row(
+                modifier = Modifier.fillMaxWidth(0.9f),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                    Text(
+                        text = addon.manifest.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = addon.resourceNames.joinToString(", ").ifBlank { "add-on" },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                AppButton(onClick = { viewModel.removeAddon(addon.transportUrl) }) { Text("Remove") }
+            }
+        }
+
         // ---- Players -------------------------------------------------------
         item { SectionHeader("Preferred Player") }
         items(state.availablePlayers, key = { it.id }) { player ->

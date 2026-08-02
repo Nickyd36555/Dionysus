@@ -9,6 +9,7 @@ import androidx.room.Upsert
 import com.dionysus.tv.data.local.entity.DownloadEntity
 import com.dionysus.tv.data.local.entity.FavoriteEntity
 import com.dionysus.tv.data.local.entity.HomeRowConfigEntity
+import com.dionysus.tv.data.local.entity.InstalledAddonEntity
 import com.dionysus.tv.data.local.entity.WatchProgressEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -61,6 +62,21 @@ interface DownloadDao {
 
     @Delete
     suspend fun delete(download: DownloadEntity)
+}
+
+@Dao
+interface AddonDao {
+    @Query("SELECT * FROM addons ORDER BY position ASC")
+    fun observeAll(): Flow<List<InstalledAddonEntity>>
+
+    @Query("SELECT COALESCE(MAX(position), -1) FROM addons")
+    suspend fun maxPosition(): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(addon: InstalledAddonEntity)
+
+    @Query("DELETE FROM addons WHERE transportUrl = :url")
+    suspend fun remove(url: String)
 }
 
 @Dao

@@ -2,15 +2,12 @@
 
 package com.dionysus.tv.ui.home
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,10 +16,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.res.painterResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.dionysus.tv.R
 import com.dionysus.tv.ui.components.FeaturedCarousel
 import com.dionysus.tv.ui.components.MediaRow
 import com.dionysus.tv.ui.update.UpdateBanner
@@ -46,20 +41,6 @@ fun HomeScreen(
                 onUpdate = updateViewModel::update,
                 onDismiss = updateViewModel::dismiss,
                 modifier = Modifier.padding(top = 24.dp),
-            )
-        }
-
-        // Brand wordmark in the upper-right corner.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp, end = 48.dp),
-            horizontalArrangement = Arrangement.End,
-        ) {
-            Image(
-                painter = painterResource(R.drawable.logo_wordmark),
-                contentDescription = "Dionysus Streaming",
-                modifier = Modifier.height(34.dp),
             )
         }
 
