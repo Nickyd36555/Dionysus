@@ -88,10 +88,21 @@ class StreamsViewModel @Inject constructor(
             )
             val found = scrapers.findStreams(query)
             val annotated = debrid.annotateCache(found)
+            val onlyCached = settings.currentOnlyCached()
+            val visible = if (onlyCached) {
+                annotated.filter { it.cachedOn.isNotEmpty() || it.isDirect }
+            } else {
+                annotated
+            }
             _state.value = _state.value.copy(
-                sources = annotated,
+                sources = visible,
                 isLoading = false,
-                error = if (annotated.isEmpty()) "No sources found." else null,
+                error = when {
+                    visible.isNotEmpty() -> null
+                    onlyCached && annotated.isNotEmpty() ->
+                        "No cached sources found. Turn off \"Cached only\" in Settings to see all ${annotated.size} sources."
+                    else -> "No sources found."
+                },
             )
         }
     }

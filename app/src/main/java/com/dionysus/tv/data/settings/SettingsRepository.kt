@@ -1,6 +1,7 @@
 package com.dionysus.tv.data.settings
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -36,6 +37,7 @@ class SettingsRepository @Inject constructor(
         val PREFERRED_PLAYER = stringPreferencesKey("preferred_player")
         val HOME_LAYOUT = stringPreferencesKey("home_layout_json")
         val ENABLED_SCRAPERS = stringSetPreferencesKey("enabled_scrapers")
+        val ONLY_CACHED = booleanPreferencesKey("only_cached")
     }
 
     val realDebridToken: Flow<String?> = get(Keys.REAL_DEBRID_TOKEN)
@@ -53,6 +55,10 @@ class SettingsRepository @Inject constructor(
         context.dataStore.data.map { it[Keys.ENABLED_SCRAPERS] ?: DEFAULT_SCRAPERS }
 
     val homeLayoutJson: Flow<String?> = get(Keys.HOME_LAYOUT)
+
+    /** When true, only sources already cached on a debrid service are shown. */
+    val onlyCached: Flow<Boolean> =
+        context.dataStore.data.map { it[Keys.ONLY_CACHED] ?: false }
 
     suspend fun setRealDebridToken(token: String?) = put(Keys.REAL_DEBRID_TOKEN, token)
 
@@ -89,6 +95,12 @@ class SettingsRepository @Inject constructor(
     suspend fun setTorrentioBaseUrl(url: String) = put(Keys.TORRENTIO_BASE_URL, url)
     suspend fun setPreferredPlayer(id: String) = put(Keys.PREFERRED_PLAYER, id)
     suspend fun setHomeLayoutJson(json: String) = put(Keys.HOME_LAYOUT, json)
+
+    suspend fun setOnlyCached(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.ONLY_CACHED] = enabled }
+    }
+
+    suspend fun currentOnlyCached(): Boolean = onlyCached.first()
 
     suspend fun setScraperEnabled(id: String, enabled: Boolean) {
         context.dataStore.edit { prefs ->

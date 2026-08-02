@@ -35,6 +35,7 @@ data class SettingsUiState(
     val realDebridConnected: Boolean = false,
     val realDebridUser: String? = null,
     val premiumizeConnected: Boolean = false,
+    val onlyCached: Boolean = false,
     val deviceCode: RdDeviceCode? = null,
     val statusMessage: String? = null,
     val scrapers: List<ScraperInfo> = emptyList(),
@@ -69,6 +70,7 @@ class SettingsViewModel @Inject constructor(
             orionKey = settings.currentOrionApiKey().orEmpty(),
             torrentioUrl = settings.torrentioBaseUrl.first(),
             preferredPlayer = settings.preferredPlayerId.first(),
+            onlyCached = settings.currentOnlyCached(),
             availablePlayers = listOf(ExternalPlayer.INTERNAL) + playerLauncher.installedExternalPlayers(),
             scrapers = scraperRepository.allScrapers.map {
                 ScraperInfo(it.id, it.displayName, it.id in enabled)
@@ -119,6 +121,11 @@ class SettingsViewModel @Inject constructor(
     fun setPreferredPlayer(id: String) {
         _state.value = _state.value.copy(preferredPlayer = id)
         viewModelScope.launch { settings.setPreferredPlayer(id) }
+    }
+
+    fun setOnlyCached(enabled: Boolean) {
+        _state.value = _state.value.copy(onlyCached = enabled)
+        viewModelScope.launch { settings.setOnlyCached(enabled) }
     }
 
     fun toggleScraper(id: String, enabled: Boolean) {

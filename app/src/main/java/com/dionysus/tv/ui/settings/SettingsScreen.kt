@@ -97,6 +97,13 @@ fun SettingsScreen(
                 isSecret = true,
             )
         }
+        item {
+            ToggleRow(
+                label = "Cached only (hide sources that aren't instantly playable)",
+                enabled = state.onlyCached,
+                onToggle = viewModel::setOnlyCached,
+            )
+        }
 
         // ---- Metadata ------------------------------------------------------
         item { SectionHeader("Metadata (TMDB)") }
