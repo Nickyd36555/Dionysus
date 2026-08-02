@@ -52,8 +52,10 @@ class PremiumizeService @Inject constructor(
 
     override suspend fun resolve(source: StreamSource): ResolvedStream? {
         val key = settings.currentPremiumizeApiKey() ?: return null
+        // directdl needs a magnet URI or a hoster URL — a bare info-hash is
+        // rejected, so synthesize a magnet from the hash when that's all we have.
         val src = source.magnetUri
-            ?: source.infoHash
+            ?: source.infoHash?.let { "magnet:?xt=urn:btih:$it" }
             ?: source.url
             ?: return null
         return try {

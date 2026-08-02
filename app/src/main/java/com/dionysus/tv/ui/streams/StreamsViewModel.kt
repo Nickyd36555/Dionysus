@@ -103,7 +103,8 @@ class StreamsViewModel @Inject constructor(
             _state.value = _state.value.copy(resolvingTitle = null)
             if (url.isNullOrBlank()) {
                 _state.value = _state.value.copy(
-                    message = "Couldn't resolve this source. Connect a debrid service or try another source.",
+                    message = "Couldn't resolve this source — Premiumize only serves torrents it already has cached. " +
+                        "Try a source marked cached (⚡), or use one with high seeders.",
                 )
                 return@launch
             }
