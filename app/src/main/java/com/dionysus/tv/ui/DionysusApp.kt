@@ -18,11 +18,22 @@ import com.dionysus.tv.ui.navigation.TopLevelDestination
 import com.dionysus.tv.ui.player.PlayerScreen
 import com.dionysus.tv.ui.search.SearchScreen
 import com.dionysus.tv.ui.settings.SettingsScreen
+import com.dionysus.tv.ui.splash.SplashScreen
 import com.dionysus.tv.ui.streams.StreamsScreen
 
 @Composable
 fun DionysusApp(navController: NavHostController = rememberNavController()) {
-    NavHost(navController = navController, startDestination = Routes.HOME) {
+    NavHost(navController = navController, startDestination = Routes.SPLASH) {
+
+        composable(Routes.SPLASH) {
+            SplashScreen(
+                onDone = {
+                    navController.navigate(Routes.HOME) {
+                        popUpTo(Routes.SPLASH) { inclusive = true }
+                    }
+                },
+            )
+        }
 
         composable(Routes.HOME) {
             TopLevel(navController) {

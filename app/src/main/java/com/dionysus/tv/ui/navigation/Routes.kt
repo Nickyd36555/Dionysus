@@ -4,6 +4,7 @@ import android.net.Uri
 
 /** Central place for navigation routes and their argument builders. */
 object Routes {
+    const val SPLASH = "splash"
     const val HOME = "home"
     const val SEARCH = "search"
     const val DOWNLOADS = "downloads"
