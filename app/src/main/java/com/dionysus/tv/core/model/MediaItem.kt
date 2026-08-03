@@ -24,6 +24,23 @@ data class MediaItem(
     val imdbId: String? = null,
 )
 
+/**
+ * Extra detail-page info sourced from OMDb (IMDb data). All optional — the UI
+ * only renders the fields that are present.
+ */
+data class MovieExtra(
+    val rated: String? = null,
+    val director: String? = null,
+    val writer: String? = null,
+    val cast: String? = null,
+    val awards: String? = null,
+    val boxOffice: String? = null,
+    val imdbRating: String? = null,
+    val rottenTomatoes: String? = null,
+    val metacritic: String? = null,
+    val plot: String? = null,
+)
+
 /** A season within a [MediaType.TV_SHOW]. */
 data class Season(
     val seasonNumber: Int,

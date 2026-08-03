@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -24,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
@@ -135,6 +137,10 @@ fun DetailScreen(
             }
         }
 
+        state.extra?.let { extra ->
+            item { ExtraInfoSection(extra) }
+        }
+
         if (item.type == MediaType.TV_SHOW && state.seasons.isNotEmpty()) {
             item {
                 Text(
@@ -162,6 +168,63 @@ fun DetailScreen(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ExtraInfoSection(extra: com.dionysus.tv.core.model.MovieExtra) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 48.dp, end = 48.dp, top = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        // Ratings chips (IMDb / Rotten Tomatoes / Metacritic).
+        val ratings = buildList {
+            extra.imdbRating?.let { add("IMDb  ⭐ $it") }
+            extra.rottenTomatoes?.let { add("🍅 Rotten Tomatoes  $it") }
+            extra.metacritic?.let { add("Ⓜ Metacritic  $it") }
+            extra.rated?.let { add("Rated  $it") }
+        }
+        if (ratings.isNotEmpty()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ratings.forEach { chip ->
+                    Text(
+                        text = chip,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                    )
+                }
+            }
+        }
+        InfoLine("Cast", extra.cast)
+        InfoLine("Director", extra.director)
+        InfoLine("Writer", extra.writer)
+        InfoLine("Awards", extra.awards)
+        InfoLine("Box Office", extra.boxOffice)
+    }
+}
+
+@Composable
+private fun InfoLine(label: String, value: String?) {
+    if (value.isNullOrBlank()) return
+    Row {
+        Text(
+            text = "$label:  ",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

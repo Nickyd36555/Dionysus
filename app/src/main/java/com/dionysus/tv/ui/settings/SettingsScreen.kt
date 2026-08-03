@@ -159,6 +159,14 @@ fun SettingsScreen(
                 isSecret = true,
             )
         }
+        item {
+            SettingTextField(
+                label = "OMDb API key (extra info: cast, RT/Metacritic, awards)",
+                value = state.omdbKey,
+                onValueChange = viewModel::setOmdbKey,
+                isSecret = true,
+            )
+        }
 
         // ---- Scrapers ------------------------------------------------------
         item { SectionHeader("Scrapers") }

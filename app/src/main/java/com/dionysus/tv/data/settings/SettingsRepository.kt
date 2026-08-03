@@ -33,6 +33,7 @@ class SettingsRepository @Inject constructor(
         val PREMIUMIZE_API_KEY = stringPreferencesKey("premiumize_api_key")
         val ORION_API_KEY = stringPreferencesKey("orion_api_key")
         val TMDB_API_KEY = stringPreferencesKey("tmdb_api_key")
+        val OMDB_API_KEY = stringPreferencesKey("omdb_api_key")
         val TORRENTIO_BASE_URL = stringPreferencesKey("torrentio_base_url")
         val PREFERRED_PLAYER = stringPreferencesKey("preferred_player")
         val HOME_LAYOUT = stringPreferencesKey("home_layout_json")
@@ -44,6 +45,9 @@ class SettingsRepository @Inject constructor(
     val premiumizeApiKey: Flow<String?> = get(Keys.PREMIUMIZE_API_KEY)
     val orionApiKey: Flow<String?> = get(Keys.ORION_API_KEY)
     val tmdbApiKey: Flow<String?> = get(Keys.TMDB_API_KEY)
+
+    /** OMDb key powers the extra movie/show info (cast, RT/Metacritic, awards). */
+    val omdbApiKey: Flow<String> = get(Keys.OMDB_API_KEY).map { it ?: DEFAULT_OMDB_KEY }
 
     val torrentioBaseUrl: Flow<String> =
         get(Keys.TORRENTIO_BASE_URL).map { it ?: DEFAULT_TORRENTIO_URL }
@@ -92,6 +96,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setPremiumizeApiKey(key: String?) = put(Keys.PREMIUMIZE_API_KEY, key)
     suspend fun setOrionApiKey(key: String?) = put(Keys.ORION_API_KEY, key)
     suspend fun setTmdbApiKey(key: String?) = put(Keys.TMDB_API_KEY, key)
+    suspend fun setOmdbApiKey(key: String?) = put(Keys.OMDB_API_KEY, key)
     suspend fun setTorrentioBaseUrl(url: String) = put(Keys.TORRENTIO_BASE_URL, url)
     suspend fun setPreferredPlayer(id: String) = put(Keys.PREFERRED_PLAYER, id)
     suspend fun setHomeLayoutJson(json: String) = put(Keys.HOME_LAYOUT, json)
@@ -115,6 +120,7 @@ class SettingsRepository @Inject constructor(
     suspend fun currentPremiumizeApiKey(): String? = premiumizeApiKey.first()
     suspend fun currentOrionApiKey(): String? = orionApiKey.first()
     suspend fun currentTmdbApiKey(): String? = tmdbApiKey.first()
+    suspend fun currentOmdbApiKey(): String = omdbApiKey.first()
 
     private fun get(key: androidx.datastore.preferences.core.Preferences.Key<String>): Flow<String?> =
         context.dataStore.data.map { it[key]?.takeIf(String::isNotBlank) }
@@ -131,6 +137,8 @@ class SettingsRepository @Inject constructor(
     companion object {
         const val DEFAULT_TORRENTIO_URL = "https://torrentio.strem.fun/"
         const val DEFAULT_PLAYER = "internal"
+        // A working default so extra info shows out of the box; overridable in Settings.
+        const val DEFAULT_OMDB_KEY = "1cd5b3b3"
         val DEFAULT_SCRAPERS = setOf("torrentio", "stremio_addons")
     }
 }

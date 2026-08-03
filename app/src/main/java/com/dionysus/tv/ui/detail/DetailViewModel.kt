@@ -7,12 +7,14 @@ import com.dionysus.tv.core.model.DataResult
 import com.dionysus.tv.core.model.Episode
 import com.dionysus.tv.core.model.MediaItem
 import com.dionysus.tv.core.model.MediaType
+import com.dionysus.tv.core.model.MovieExtra
 import com.dionysus.tv.core.model.Season
 import com.dionysus.tv.data.addons.AddonMeta
 import com.dionysus.tv.data.addons.AddonRepository
 import com.dionysus.tv.data.addons.toMediaItem
 import com.dionysus.tv.data.local.LibraryRepository
 import com.dionysus.tv.data.metadata.MetadataRepository
+import com.dionysus.tv.data.metadata.omdb.OmdbRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +31,7 @@ data class DetailUiState(
     val episodes: List<Episode> = emptyList(),
     val isFavorite: Boolean = false,
     val resumePositionMs: Long = 0L,
+    val extra: MovieExtra? = null,
     val isLoading: Boolean = true,
     val error: String? = null,
 )
@@ -39,6 +42,7 @@ class DetailViewModel @Inject constructor(
     private val metadata: MetadataRepository,
     private val addons: AddonRepository,
     private val library: LibraryRepository,
+    private val omdb: OmdbRepository,
 ) : ViewModel() {
 
     val mediaId: String = savedStateHandle.get<String>("mediaId").orEmpty()
@@ -66,6 +70,19 @@ class DetailViewModel @Inject constructor(
                 mediaId.startsWith("stremio:") -> loadStremio()
                 mediaId.startsWith("tmdb:") -> loadTmdb()
                 else -> _state.value = _state.value.copy(isLoading = false, error = "Unsupported media id")
+            }
+            // Enrich with IMDb/RT/Metacritic data once the base item is known.
+            _state.value.item?.let { item ->
+                val extra = omdb.extra(item.imdbId, item.title, item.year)
+                if (extra != null) {
+                    _state.value = _state.value.copy(
+                        extra = extra,
+                        // Prefer OMDb's fuller plot when TMDB's overview is empty.
+                        item = _state.value.item?.let { cur ->
+                            if (cur.overview.isBlank() && extra.plot != null) cur.copy(overview = extra.plot) else cur
+                        },
+                    )
+                }
             }
         }
     }
