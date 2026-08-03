@@ -87,6 +87,12 @@ interface HomeRowDao {
     @Query("SELECT * FROM home_rows ORDER BY position ASC")
     fun observeAll(): Flow<List<HomeRowConfigEntity>>
 
+    @Query("SELECT * FROM home_rows ORDER BY position ASC")
+    suspend fun all(): List<HomeRowConfigEntity>
+
+    @Query("SELECT * FROM home_rows WHERE id = :id")
+    suspend fun get(id: String): HomeRowConfigEntity?
+
     @Query("SELECT COUNT(*) FROM home_rows")
     suspend fun count(): Int
 

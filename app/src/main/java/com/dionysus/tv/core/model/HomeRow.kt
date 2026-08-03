@@ -9,6 +9,8 @@ enum class HomeRowKind {
     POPULAR_SHOWS,
     TOP_RATED_MOVIES,
     DOWNLOADS,
+    /** A catalog provided by an installed add-on; identified by [HomeRow.param]. */
+    ADDON_CATALOG,
     ;
 
     companion object {

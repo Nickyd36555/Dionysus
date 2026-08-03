@@ -47,6 +47,7 @@ data class SettingsUiState(
     val statusMessage: String? = null,
     val scrapers: List<ScraperInfo> = emptyList(),
     val homeRows: List<HomeRow> = emptyList(),
+    val featuredSource: String = "TRENDING",
     val addons: List<Addon> = emptyList(),
     val addonUrlInput: String = "",
     val syncCode: String? = null,
@@ -245,6 +246,7 @@ class SettingsViewModel @Inject constructor(
         _state.value = _state.value.copy(
             tmdbKey = settings.currentTmdbApiKey().orEmpty(),
             omdbKey = settings.currentOmdbApiKey(),
+            featuredSource = settings.currentFeaturedSource(),
             premiumizeKey = settings.currentPremiumizeApiKey().orEmpty(),
             orionKey = settings.currentOrionApiKey().orEmpty(),
             torrentioUrl = settings.torrentioBaseUrl.first(),
@@ -321,6 +323,19 @@ class SettingsViewModel @Inject constructor(
 
     fun toggleHomeRow(id: String, enabled: Boolean) {
         viewModelScope.launch { homeLayout.setEnabled(id, enabled) }
+    }
+
+    fun moveHomeRowUp(id: String) {
+        viewModelScope.launch { homeLayout.moveUp(id) }
+    }
+
+    fun moveHomeRowDown(id: String) {
+        viewModelScope.launch { homeLayout.moveDown(id) }
+    }
+
+    fun setFeaturedSource(kind: String) {
+        _state.value = _state.value.copy(featuredSource = kind)
+        viewModelScope.launch { settings.setFeaturedSource(kind) }
     }
 
     fun connectRealDebrid() {

@@ -4,9 +4,11 @@ package com.dionysus.tv.ui.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -316,12 +318,55 @@ fun SettingsScreen(
 
         // ---- Home layout ---------------------------------------------------
         item { SectionHeader("Customize Home") }
-        items(state.homeRows, key = { it.id }) { row ->
-            ToggleRow(
-                label = row.title,
-                enabled = row.enabled,
-                onToggle = { viewModel.toggleHomeRow(row.id, it) },
+        item {
+            val options = listOf(
+                "TRENDING" to "Trending",
+                "POPULAR_MOVIES" to "Popular Movies",
+                "POPULAR_SHOWS" to "Popular Shows",
+                "TOP_RATED_MOVIES" to "Top Rated Movies",
+                "MY_LIST" to "My List",
             )
+            val currentLabel = options.firstOrNull { it.first == state.featuredSource }?.second ?: "Trending"
+            Row(
+                modifier = Modifier.fillMaxWidth(0.9f).padding(bottom = 8.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                    Text("Featured banner", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                    Text("Shown in the big carousel at the top of Home", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                AppButton(onClick = {
+                    val idx = options.indexOfFirst { it.first == state.featuredSource }
+                    val next = options[(idx + 1).mod(options.size)]
+                    viewModel.setFeaturedSource(next.first)
+                }) { Text(currentLabel) }
+            }
+        }
+        item {
+            Text(
+                "Toggle rows on/off and use ↑ ↓ to reorder. Add-on catalogs appear here too.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth(0.9f).padding(bottom = 4.dp),
+            )
+        }
+        items(state.homeRows, key = { it.id }) { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(0.9f).padding(vertical = 2.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    ToggleRow(
+                        label = row.title + if (!row.enabled) "  (hidden)" else "",
+                        enabled = row.enabled,
+                        onToggle = { viewModel.toggleHomeRow(row.id, it) },
+                    )
+                }
+                AppButton(onClick = { viewModel.moveHomeRowUp(row.id) }) { Text("↑") }
+                Spacer(Modifier.width(8.dp))
+                AppButton(onClick = { viewModel.moveHomeRowDown(row.id) }) { Text("↓") }
+            }
         }
 
         // ---- App / updates -------------------------------------------------

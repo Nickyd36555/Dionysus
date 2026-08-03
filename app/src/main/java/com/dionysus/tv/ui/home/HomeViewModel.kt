@@ -14,6 +14,7 @@ import com.dionysus.tv.data.local.LibraryRepository
 import com.dionysus.tv.data.local.entity.DownloadEntity
 import com.dionysus.tv.data.local.entity.WatchProgressEntity
 import com.dionysus.tv.data.metadata.MetadataRepository
+import com.dionysus.tv.data.settings.SettingsRepository
 import com.dionysus.tv.download.DownloadRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
@@ -49,6 +50,7 @@ class HomeViewModel @Inject constructor(
     private val downloads: DownloadRepository,
     private val homeLayout: HomeLayoutRepository,
     private val addons: AddonRepository,
+    private val settings: SettingsRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState())
@@ -76,57 +78,55 @@ class HomeViewModel @Inject constructor(
             downloads.downloads(),
             addons.installedAddons,
         ) { rows, favs, cw, dl, adns -> Snapshot(rows, favs, cw, dl, adns) }
-            .onEach { rebuild(it) }
+            .combine(settings.featuredSource) { snap, featured -> snap to featured }
+            .onEach { (snap, featured) -> rebuild(snap, featured) }
             .launchIn(viewModelScope)
     }
 
-    private suspend fun rebuild(snapshot: Snapshot) = coroutineScope {
-        val enabledRows = snapshot.rows.filter { it.enabled }.sortedBy { it.position }
-
-        // Fire every network fetch in parallel so first paint is bounded by the
-        // slowest single call, not the sum of them.
-        val kindsToFetch = (enabledRows.map { it.kind } + HomeRowKind.TRENDING)
-            .filter { it in NETWORK_KINDS }
-            .distinct()
-        kindsToFetch.map { kind -> async { catalog(kind) } }.awaitAll()
-
+    private suspend fun rebuild(snapshot: Snapshot, featuredKindName: String) = coroutineScope {
+        // Map every available add-on catalog to a stable id/param and make sure a
+        // config row exists for each so it can be toggled/reordered in Settings.
         val catalogDefs = snapshot.addons
             .filter { it.providesCatalog }
             .flatMap { addon -> addon.manifest.catalogs.map { addon to it } }
-        val addonFetched = catalogDefs.map { (addon, def) ->
-            async {
-                val key = "${addon.transportUrl}|${def.type}|${def.id}"
-                // Only cache non-empty results so a transient failure retries later.
-                val items = addonCatalogCache[key]
-                    ?: addons.catalog(addon, def).also { if (it.isNotEmpty()) addonCatalogCache[key] = it }
-                Triple(addon, def, items)
-            }
-        }.awaitAll()
+        val defByParam = catalogDefs.associateBy { (addon, def) -> paramOf(addon, def) }
+        val addonConfigs = catalogDefs.map { (addon, def) ->
+            val param = paramOf(addon, def)
+            HomeRow(
+                id = "addon:$param",
+                kind = HomeRowKind.ADDON_CATALOG,
+                title = catalogTitle(addon.manifest.name, def.name, def.type),
+                position = 0,
+                enabled = true,
+                param = param,
+            )
+        }
+        homeLayout.syncAddonCatalogs(addonConfigs)
 
-        val builtIn = enabledRows.mapNotNull { row ->
+        val enabledRows = snapshot.rows.filter { it.enabled }.sortedBy { it.position }
+
+        // Fire network catalog fetches in parallel (bounded by slowest call).
+        val kindsToFetch = (enabledRows.map { it.kind } + HomeRowKind.TRENDING)
+            .filter { it in NETWORK_KINDS }.distinct()
+        kindsToFetch.map { kind -> async { catalog(kind) } }.awaitAll()
+
+        val rows = enabledRows.mapNotNull { row ->
             val items = when (row.kind) {
                 HomeRowKind.CONTINUE_WATCHING -> snapshot.continueWatching.map { it.toMediaItem() }
                 HomeRowKind.MY_LIST -> snapshot.favorites
                 HomeRowKind.DOWNLOADS -> snapshot.downloads.map { it.toMediaItem() }
+                HomeRowKind.ADDON_CATALOG -> {
+                    val pd = row.param?.let { defByParam[it] }
+                    if (pd == null) emptyList() else fetchAddon(pd.first, pd.second)
+                }
                 else -> catalog(row.kind)
             }.distinctBy { it.id }
             if (items.isEmpty()) null
             else HomeRowUi(row.id, row.title, items, isContinueWatching = row.kind == HomeRowKind.CONTINUE_WATCHING)
         }
 
-        val addonRows = addonFetched
-            .filter { it.third.isNotEmpty() }
-            .map { (addon, def, items) ->
-                HomeRowUi(
-                    "addon:${addon.transportUrl}|${def.type}|${def.id}",
-                    catalogTitle(addon.manifest.name, def.name, def.type),
-                    items.distinctBy { it.id },
-                )
-            }
-
-        val rows = builtIn + addonRows
-        val featured = (catalogCache[HomeRowKind.TRENDING] ?: emptyList())
-            .ifEmpty { addonRows.firstOrNull()?.items.orEmpty() }
+        val featured = featuredItems(featuredKindName, snapshot)
+            .ifEmpty { rows.firstOrNull { !it.isContinueWatching }?.items.orEmpty() }
 
         _state.value = HomeUiState(
             featured = featured.take(8),
@@ -134,6 +134,26 @@ class HomeViewModel @Inject constructor(
             isLoading = false,
             error = if (rows.isEmpty() && featured.isEmpty()) lastMetadataError else null,
         )
+    }
+
+    private fun paramOf(addon: Addon, def: com.dionysus.tv.data.addons.AddonCatalogDef): String =
+        "${addon.transportUrl}|${def.type}|${def.id}"
+
+    private suspend fun fetchAddon(addon: Addon, def: com.dionysus.tv.data.addons.AddonCatalogDef): List<MediaItem> {
+        val key = paramOf(addon, def)
+        addonCatalogCache[key]?.let { return it }
+        return addons.catalog(addon, def).also { if (it.isNotEmpty()) addonCatalogCache[key] = it }
+    }
+
+    private suspend fun featuredItems(kindName: String, snapshot: Snapshot): List<MediaItem> {
+        return when (HomeRowKind.fromName(kindName)) {
+            HomeRowKind.MY_LIST -> snapshot.favorites
+            HomeRowKind.CONTINUE_WATCHING -> snapshot.continueWatching.map { it.toMediaItem() }
+            HomeRowKind.POPULAR_MOVIES -> catalog(HomeRowKind.POPULAR_MOVIES)
+            HomeRowKind.POPULAR_SHOWS -> catalog(HomeRowKind.POPULAR_SHOWS)
+            HomeRowKind.TOP_RATED_MOVIES -> catalog(HomeRowKind.TOP_RATED_MOVIES)
+            else -> catalog(HomeRowKind.TRENDING)
+        }
     }
 
     /** Distinct, readable title per catalog so movie/series rows don't collide. */

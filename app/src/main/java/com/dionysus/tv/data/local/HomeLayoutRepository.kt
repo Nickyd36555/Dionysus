@@ -26,16 +26,42 @@ class HomeLayoutRepository @Inject constructor(
         if (dao.count() == 0) dao.upsertAll(DEFAULT_ROWS)
     }
 
+    /** Toggle a row on/off, preserving its stored title/position/param. */
     suspend fun setEnabled(id: String, enabled: Boolean) {
-        val existing = DEFAULT_ROWS.firstOrNull { it.id == id } ?: return
+        val existing = dao.get(id) ?: return
         dao.upsert(existing.copy(enabled = enabled))
     }
 
-    suspend fun reorder(orderedIds: List<String>) {
-        val current = orderedIds.mapIndexedNotNull { index, id ->
-            DEFAULT_ROWS.firstOrNull { it.id == id }?.copy(position = index)
-        }
-        dao.upsertAll(current)
+    /** Move a row one slot earlier by swapping positions with its neighbor. */
+    suspend fun moveUp(id: String) = swap(id, -1)
+
+    /** Move a row one slot later by swapping positions with its neighbor. */
+    suspend fun moveDown(id: String) = swap(id, +1)
+
+    private suspend fun swap(id: String, delta: Int) {
+        val ordered = dao.all().sortedBy { it.position }.toMutableList()
+        val index = ordered.indexOfFirst { it.id == id }
+        val target = index + delta
+        if (index < 0 || target !in ordered.indices) return
+        // Reassign compact positions after the swap so ordering stays stable.
+        val a = ordered[index]
+        ordered[index] = ordered[target]
+        ordered[target] = a
+        dao.upsertAll(ordered.mapIndexed { i, row -> row.copy(position = i) })
+    }
+
+    /**
+     * Ensure a config row exists for each currently-available add-on catalog so
+     * it shows up in Customize Home and can be toggled/reordered. Existing rows
+     * (and the user's choices for them) are left untouched.
+     */
+    suspend fun syncAddonCatalogs(catalogs: List<HomeRow>) {
+        if (catalogs.isEmpty()) return
+        val existingIds = dao.all().map { it.id }.toSet()
+        var nextPos = (dao.all().maxOfOrNull { it.position } ?: -1) + 1
+        val toAdd = catalogs.filter { it.id !in existingIds }
+            .map { it.copy(position = nextPos++).toEntity() }
+        if (toAdd.isNotEmpty()) dao.upsertAll(toAdd)
     }
 
     suspend fun upsert(row: HomeRow) = dao.upsert(row.toEntity())

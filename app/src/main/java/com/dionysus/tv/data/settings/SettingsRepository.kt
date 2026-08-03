@@ -37,6 +37,7 @@ class SettingsRepository @Inject constructor(
         val TORRENTIO_BASE_URL = stringPreferencesKey("torrentio_base_url")
         val PREFERRED_PLAYER = stringPreferencesKey("preferred_player")
         val HOME_LAYOUT = stringPreferencesKey("home_layout_json")
+        val FEATURED_SOURCE = stringPreferencesKey("featured_source")
         val ENABLED_SCRAPERS = stringSetPreferencesKey("enabled_scrapers")
         val ONLY_CACHED = booleanPreferencesKey("only_cached")
     }
@@ -59,6 +60,9 @@ class SettingsRepository @Inject constructor(
         context.dataStore.data.map { it[Keys.ENABLED_SCRAPERS] ?: DEFAULT_SCRAPERS }
 
     val homeLayoutJson: Flow<String?> = get(Keys.HOME_LAYOUT)
+
+    /** Which row kind feeds the big top carousel (default TRENDING). */
+    val featuredSource: Flow<String> = get(Keys.FEATURED_SOURCE).map { it ?: DEFAULT_FEATURED }
 
     /** When true, only sources already cached on a debrid service are shown. */
     val onlyCached: Flow<Boolean> =
@@ -100,6 +104,8 @@ class SettingsRepository @Inject constructor(
     suspend fun setTorrentioBaseUrl(url: String) = put(Keys.TORRENTIO_BASE_URL, url)
     suspend fun setPreferredPlayer(id: String) = put(Keys.PREFERRED_PLAYER, id)
     suspend fun setHomeLayoutJson(json: String) = put(Keys.HOME_LAYOUT, json)
+    suspend fun setFeaturedSource(kind: String) = put(Keys.FEATURED_SOURCE, kind)
+    suspend fun currentFeaturedSource(): String = featuredSource.first()
 
     suspend fun setOnlyCached(enabled: Boolean) {
         context.dataStore.edit { it[Keys.ONLY_CACHED] = enabled }
@@ -139,6 +145,7 @@ class SettingsRepository @Inject constructor(
         const val DEFAULT_PLAYER = "internal"
         // A working default so extra info shows out of the box; overridable in Settings.
         const val DEFAULT_OMDB_KEY = "1cd5b3b3"
+        const val DEFAULT_FEATURED = "TRENDING"
         val DEFAULT_SCRAPERS = setOf("torrentio", "stremio_addons")
     }
 }
