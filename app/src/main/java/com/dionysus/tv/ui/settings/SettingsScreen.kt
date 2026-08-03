@@ -18,8 +18,15 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -303,6 +310,10 @@ private fun ToggleRow(label: String, enabled: Boolean, onToggle: (Boolean) -> Un
     }
 }
 
+/**
+ * A focusable settings row you can D-pad straight past. Tapping/OK opens a
+ * popup to edit — so the on-screen keyboard never traps list navigation.
+ */
 @Composable
 private fun SettingTextField(
     label: String,
@@ -310,26 +321,73 @@ private fun SettingTextField(
     onValueChange: (String) -> Unit,
     isSecret: Boolean = false,
 ) {
-    Column(modifier = Modifier.fillMaxWidth(0.7f)) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(bottom = 6.dp),
+    var editing by remember { mutableStateOf(false) }
+    val display = when {
+        value.isBlank() -> "Not set — press to enter"
+        isSecret -> "•".repeat(value.length.coerceIn(4, 12))
+        else -> value
+    }
+    AppListItem(
+        selected = false,
+        onClick = { editing = true },
+        headlineContent = { Text(label) },
+        supportingContent = { Text(display) },
+        modifier = Modifier.fillMaxWidth(0.85f),
+    )
+    if (editing) {
+        EditFieldDialog(
+            title = label,
+            initial = value,
+            isSecret = isSecret,
+            onConfirm = { onValueChange(it); editing = false },
+            onDismiss = { editing = false },
         )
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface),
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-            visualTransformation = if (isSecret) PasswordVisualTransformation() else VisualTransformation.None,
-            keyboardOptions = KeyboardOptions(keyboardType = if (isSecret) KeyboardType.Password else KeyboardType.Uri),
+    }
+}
+
+@Composable
+private fun EditFieldDialog(
+    title: String,
+    initial: String,
+    isSecret: Boolean,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        var text by remember { mutableStateOf(initial) }
+        val fieldFocus = remember { FocusRequester() }
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-        )
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(title, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
+            BasicTextField(
+                value = text,
+                onValueChange = { text = it },
+                singleLine = true,
+                textStyle = TextStyle(
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = MaterialTheme.typography.titleMedium.fontSize,
+                ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                visualTransformation = if (isSecret) PasswordVisualTransformation() else VisualTransformation.None,
+                keyboardOptions = KeyboardOptions(keyboardType = if (isSecret) KeyboardType.Password else KeyboardType.Uri),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = 16.dp, vertical = 14.dp)
+                    .focusRequester(fieldFocus),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                AppButton(onClick = { onConfirm(text) }) { Text("Save") }
+                AppButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        }
+        LaunchedEffect(Unit) { runCatching { fieldFocus.requestFocus() } }
     }
 }
