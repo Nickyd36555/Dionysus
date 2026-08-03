@@ -77,6 +77,7 @@ fun LiveTvScreen(
             if (state.hasPlaylists) {
                 ModeToggle(
                     mode = state.mode,
+                    hasVod = state.hasVod,
                     onSelect = viewModel::setMode,
                 )
             }
@@ -91,6 +92,17 @@ fun LiveTvScreen(
                 upcomingFor = viewModel::upcoming,
                 onPlay = onPlay,
             )
+            state.mode == LiveTvMode.VOD -> Row(Modifier.fillMaxSize().padding(top = 12.dp)) {
+                CategoryRail(
+                    categories = state.vodCategories,
+                    selected = state.selectedVodCategory,
+                    onSelect = viewModel::selectVodCategory,
+                    modifier = Modifier.width(240.dp).fillMaxHeight(),
+                )
+                Box(Modifier.fillMaxSize().padding(start = 16.dp)) {
+                    VodGrid(vod = state.visibleVod, onPlay = onPlay)
+                }
+            }
             else -> Row(Modifier.fillMaxSize().padding(top = 12.dp)) {
                 CategoryRail(
                     categories = state.categories,
@@ -99,18 +111,14 @@ fun LiveTvScreen(
                     modifier = Modifier.width(240.dp).fillMaxHeight(),
                 )
                 Box(Modifier.fillMaxSize().padding(start = 16.dp)) {
-                    if (state.showingVod) {
-                        VodGrid(vod = state.vod, onPlay = onPlay)
-                    } else {
-                        ChannelGrid(
-                            channels = state.visibleChannels,
-                            favorites = state.favorites,
-                            error = state.error,
-                            nowTitleFor = { viewModel.nowNext(it).now?.title },
-                            onPlay = onPlay,
-                            onToggleFavorite = viewModel::toggleFavorite,
-                        )
-                    }
+                    ChannelGrid(
+                        channels = state.visibleChannels,
+                        favorites = state.favorites,
+                        error = state.error,
+                        nowTitleFor = { viewModel.nowNext(it).now?.title },
+                        onPlay = onPlay,
+                        onToggleFavorite = viewModel::toggleFavorite,
+                    )
                 }
             }
         }
@@ -118,9 +126,12 @@ fun LiveTvScreen(
 }
 
 @Composable
-private fun ModeToggle(mode: LiveTvMode, onSelect: (LiveTvMode) -> Unit) {
+private fun ModeToggle(mode: LiveTvMode, hasVod: Boolean, onSelect: (LiveTvMode) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         TogglePill("Channels", mode == LiveTvMode.CHANNELS) { onSelect(LiveTvMode.CHANNELS) }
+        if (hasVod) {
+            TogglePill("Movies (VOD)", mode == LiveTvMode.VOD) { onSelect(LiveTvMode.VOD) }
+        }
         TogglePill("TV Guide", mode == LiveTvMode.GUIDE) { onSelect(LiveTvMode.GUIDE) }
     }
 }

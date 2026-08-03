@@ -22,31 +22,40 @@ import javax.inject.Inject
 
 const val CATEGORY_FAVORITES = "★ Favorites"
 const val CATEGORY_ALL = "All Channels"
-const val CATEGORY_VOD = "🎬 VOD Movies"
+const val CATEGORY_ALL_VOD = "All Movies"
 
-enum class LiveTvMode { CHANNELS, GUIDE }
+enum class LiveTvMode { CHANNELS, VOD, GUIDE }
 
 data class LiveTvUiState(
     val hasPlaylists: Boolean = true,
+    val hasVod: Boolean = false,
     val isLoading: Boolean = true,
     val mode: LiveTvMode = LiveTvMode.CHANNELS,
     val categories: List<String> = emptyList(),
     val selectedCategory: String = CATEGORY_ALL,
+    val selectedVodCategory: String = CATEGORY_ALL_VOD,
     val channels: List<Channel> = emptyList(),
     val vod: List<MediaItem> = emptyList(),
     val favorites: Set<String> = emptySet(),
     val epg: Map<String, List<Programme>> = emptyMap(),
     val error: String? = null,
 ) {
-    val showingVod: Boolean get() = selectedCategory == CATEGORY_VOD
-
-    /** Channels shown for the current category. */
+    /** Channels shown for the current channel category. */
     val visibleChannels: List<Channel>
         get() = when (selectedCategory) {
             CATEGORY_FAVORITES -> channels.filter { it.id in favorites }
-            CATEGORY_ALL, CATEGORY_VOD -> channels
+            CATEGORY_ALL -> channels
             else -> channels.filter { it.group == selectedCategory }
         }
+
+    /** VOD categories (from the provider), with an "All" entry first. */
+    val vodCategories: List<String>
+        get() = listOf(CATEGORY_ALL_VOD) + vod.flatMap { it.genres }.distinct().sorted()
+
+    /** VOD movies shown for the current VOD category. */
+    val visibleVod: List<MediaItem>
+        get() = if (selectedVodCategory == CATEGORY_ALL_VOD) vod
+        else vod.filter { selectedVodCategory in it.genres }
 
     /** Channels that have EPG data, used to populate the guide. */
     val guideChannels: List<Channel>
@@ -79,13 +88,13 @@ class LiveTvViewModel @Inject constructor(
                     val groups = channels.map { it.group }.distinct().sorted()
                     _state.value = _state.value.copy(
                         hasPlaylists = hasPlaylists,
+                        hasVod = vod.isNotEmpty(),
                         isLoading = false,
                         channels = channels,
                         vod = vod,
                         categories = buildList {
                             add(CATEGORY_FAVORITES)
                             add(CATEGORY_ALL)
-                            if (vod.isNotEmpty()) add(CATEGORY_VOD)
                             addAll(groups)
                         },
                         error = if (channels.isEmpty() && vod.isEmpty() && hasPlaylists) "No channels found in your playlists." else null,
@@ -94,6 +103,7 @@ class LiveTvViewModel @Inject constructor(
                 is DataResult.Error -> _state.value = _state.value.copy(
                     isLoading = false,
                     hasPlaylists = hasPlaylists,
+                    hasVod = vod.isNotEmpty(),
                     vod = vod,
                     error = result.message,
                 )
@@ -104,6 +114,10 @@ class LiveTvViewModel @Inject constructor(
 
     fun setMode(mode: LiveTvMode) {
         _state.value = _state.value.copy(mode = mode)
+    }
+
+    fun selectVodCategory(category: String) {
+        _state.value = _state.value.copy(selectedVodCategory = category)
     }
 
     /** Upcoming programmes for a channel (now onward), for the guide rows. */

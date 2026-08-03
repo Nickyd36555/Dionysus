@@ -211,12 +211,15 @@ class IptvRepository @Inject constructor(
             val o = el as? JsonObject ?: return@mapNotNull null
             val streamId = o.str("stream_id").ifBlank { return@mapNotNull null }
             val ext = o.str("container_extension").ifBlank { "mp4" }
+            val category = categories[o.str("category_id")]?.takeIf { it.isNotBlank() } ?: "General"
             MediaItem(
                 id = "vod:${pl.id}:$streamId",
                 type = MediaType.MOVIE,
                 title = o.str("name").ifBlank { "Movie $streamId" },
                 posterUrl = o.str("stream_icon").takeIf { it.isNotBlank() },
                 rating = o.str("rating").toDoubleOrNull(),
+                // Category name is carried in genres so the UI can group VOD by it.
+                genres = listOf(category),
                 source = MediaSource.VOD,
                 streamUrl = "${pl.host}/movie/${pl.username}/${pl.password}/$streamId.$ext",
             )
