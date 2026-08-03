@@ -496,12 +496,14 @@ private fun EpgGuide(
     }
     val now = System.currentTimeMillis()
     val slotMs = SLOT_MIN * 60_000L
-    // Start the timeline 30 min before the current half-hour so "now" is visible.
-    val timelineStart = (now / slotMs) * slotMs - slotMs
+    // Start the timeline at the current half-hour so the on-now show is leftmost
+    // (fully-past programmes are dropped), matching how TiViMate lays it out.
+    val timelineStart = (now / slotMs) * slotMs
     val maxStop = channels.maxOf { ch -> programmesFor(ch).maxOfOrNull { it.stopMs } ?: (now + 3 * 3_600_000L) }
     val totalSlots = (((maxStop - timelineStart) / slotMs).toInt() + 1).coerceIn(6, 48)
     val scroll = rememberScrollState()
 
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().padding(top = 12.dp)) {
         // Time ruler (shares the horizontal scroll with every channel lane).
         Row {
@@ -573,6 +575,23 @@ private fun EpgGuide(
                     }
                 }
             }
+        }
+        }
+
+        // Vertical "now" line across the guide, tracking the shared scroll.
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val nowLineX = CHANNEL_COL_WIDTH +
+            ((now - timelineStart) / 60_000f * PX_PER_MIN).dp -
+            with(density) { scroll.value.toDp() }
+        if (nowLineX >= CHANNEL_COL_WIDTH) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = nowLineX, top = 44.dp)
+                    .width(2.dp)
+                    .fillMaxHeight()
+                    .background(Color(0xFFFF5252)),
+            )
         }
     }
 }
