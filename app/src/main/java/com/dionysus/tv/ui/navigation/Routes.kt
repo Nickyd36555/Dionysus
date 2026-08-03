@@ -12,15 +12,24 @@ object Routes {
 
     const val DETAIL = "detail/{mediaId}"
     const val STREAMS = "streams/{mediaId}?season={season}&episode={episode}"
-    const val PLAYER = "player?url={url}&title={title}&progressId={progressId}"
+    const val PLAYER =
+        "player?url={url}&title={title}&progressId={progressId}&poster={poster}&backdrop={backdrop}"
 
     fun detail(mediaId: String): String = "detail/${Uri.encode(mediaId)}"
 
     fun streams(mediaId: String, season: Int? = null, episode: Int? = null): String =
         "streams/${Uri.encode(mediaId)}?season=${season ?: -1}&episode=${episode ?: -1}"
 
-    fun player(url: String, title: String, progressId: String? = null): String =
-        "player?url=${Uri.encode(url)}&title=${Uri.encode(title)}&progressId=${Uri.encode(progressId.orEmpty())}"
+    fun player(
+        url: String,
+        title: String,
+        progressId: String? = null,
+        poster: String? = null,
+        backdrop: String? = null,
+    ): String =
+        "player?url=${Uri.encode(url)}&title=${Uri.encode(title)}" +
+            "&progressId=${Uri.encode(progressId.orEmpty())}" +
+            "&poster=${Uri.encode(poster.orEmpty())}&backdrop=${Uri.encode(backdrop.orEmpty())}"
 }
 
 /** Top-level destinations shown in the navigation rail. */

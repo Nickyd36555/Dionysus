@@ -39,7 +39,10 @@ class MetadataRepository @Inject constructor(
     }
 
     suspend fun search(query: String): DataResult<List<MediaItem>> = DataResult.catching {
-        api.searchMulti(requireKey(), query).results.mapNotNull { it.toMediaItem() }
+        api.searchMulti(requireKey(), query).results
+            // multi-search also returns people/actors, which aren't playable.
+            .filter { it.mediaType == "movie" || it.mediaType == "tv" }
+            .map { it.toMediaItem() }
     }
 
     suspend fun movieDetail(id: Int): DataResult<MediaItem> = DataResult.catching {

@@ -40,7 +40,7 @@ import androidx.tv.material3.Text
 
 @Composable
 fun StreamsScreen(
-    onPlay: (url: String, title: String, progressId: String) -> Unit,
+    onPlay: (url: String, title: String, progressId: String, poster: String?, backdrop: String?) -> Unit,
     onBack: () -> Unit,
     viewModel: StreamsViewModel = hiltViewModel(),
 ) {
@@ -49,7 +49,7 @@ fun StreamsScreen(
 
     LaunchedEffect(playback) {
         playback?.let {
-            onPlay(it.url, it.title, it.progressId)
+            onPlay(it.url, it.title, it.progressId, it.posterUrl, it.backdropUrl)
             viewModel.consumePlayback()
         }
     }

@@ -61,7 +61,7 @@ fun SearchScreen(
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
                 items(results, key = { it.id }) { item ->
-                    MediaCard(item = item, onClick = { onOpenDetail(item.id) })
+                    MediaCard(item = item, onClick = { onOpenDetail(item.id) }, showTypeBadge = true)
                 }
             }
         }

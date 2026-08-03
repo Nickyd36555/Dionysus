@@ -80,8 +80,8 @@ fun DionysusApp(navController: NavHostController = rememberNavController()) {
             ),
         ) {
             StreamsScreen(
-                onPlay = { url, title, progressId ->
-                    navController.navigate(Routes.player(url, title, progressId))
+                onPlay = { url, title, progressId, poster, backdrop ->
+                    navController.navigate(Routes.player(url, title, progressId, poster, backdrop))
                 },
                 onBack = { navController.popBackStack() },
             )
@@ -93,6 +93,8 @@ fun DionysusApp(navController: NavHostController = rememberNavController()) {
                 navArgument("url") { type = NavType.StringType },
                 navArgument("title") { type = NavType.StringType; defaultValue = "" },
                 navArgument("progressId") { type = NavType.StringType; defaultValue = "" },
+                navArgument("poster") { type = NavType.StringType; defaultValue = "" },
+                navArgument("backdrop") { type = NavType.StringType; defaultValue = "" },
             ),
         ) {
             PlayerScreen(onBack = { navController.popBackStack() })

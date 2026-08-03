@@ -21,6 +21,8 @@ class PlayerViewModel @Inject constructor(
     val url: String = savedStateHandle.get<String>("url").orEmpty()
     val title: String = savedStateHandle.get<String>("title").orEmpty()
     private val progressId: String = savedStateHandle.get<String>("progressId").orEmpty()
+    private val poster: String? = savedStateHandle.get<String>("poster")?.takeIf { it.isNotBlank() }
+    private val backdrop: String? = savedStateHandle.get<String>("backdrop")?.takeIf { it.isNotBlank() }
 
     /** Resume position in ms; null until loaded, then 0 or the saved point. */
     private val _startPositionMs = MutableStateFlow<Long?>(null)
@@ -44,8 +46,8 @@ class PlayerViewModel @Inject constructor(
                 type = type,
                 title = title,
                 subtitle = null,
-                posterUrl = null,
-                backdropUrl = null,
+                posterUrl = poster,
+                backdropUrl = backdrop,
                 positionMs = positionMs,
                 durationMs = durationMs,
             )

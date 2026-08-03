@@ -42,6 +42,7 @@ fun MediaCard(
     item: MediaItem,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    showTypeBadge: Boolean = false,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
@@ -65,6 +66,19 @@ fun MediaCard(
             )
         } else {
             PosterPlaceholder(item.title)
+        }
+        if (showTypeBadge) {
+            Text(
+                text = if (item.type == com.dionysus.tv.core.model.MediaType.TV_SHOW) "TV" else "MOVIE",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(6.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.primary)
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+            )
         }
     }
 }

@@ -25,7 +25,13 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /** Emitted when the internal player should open a resolved URL. */
-data class InternalPlayback(val url: String, val title: String, val progressId: String)
+data class InternalPlayback(
+    val url: String,
+    val title: String,
+    val progressId: String,
+    val posterUrl: String? = null,
+    val backdropUrl: String? = null,
+)
 
 data class StreamsUiState(
     val title: String = "",
@@ -150,15 +156,17 @@ class StreamsViewModel @Inject constructor(
     fun clearMessage() { _state.value = _state.value.copy(message = null) }
 
     private suspend fun dispatchPlayback(url: String) {
-        val title = mediaItem?.title.orEmpty()
+        val item = mediaItem
+        val title = item?.title.orEmpty()
+        val playbackEvent = InternalPlayback(url, title, progressId(), item?.posterUrl, item?.backdropUrl)
         val player = ExternalPlayer.fromId(settings.preferredPlayerId.first())
         if (player.isInternal) {
-            _playback.value = InternalPlayback(url, title, progressId())
+            _playback.value = playbackEvent
         } else {
             val launched = playerLauncher.launch(player, url, title)
             if (!launched) {
                 _state.value = _state.value.copy(message = "${player.displayName} isn't installed — using built-in player.")
-                _playback.value = InternalPlayback(url, title, progressId())
+                _playback.value = playbackEvent
             }
         }
     }
