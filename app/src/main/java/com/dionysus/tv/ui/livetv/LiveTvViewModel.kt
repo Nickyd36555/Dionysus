@@ -11,6 +11,9 @@ import com.dionysus.tv.data.iptv.NowNext
 import com.dionysus.tv.data.iptv.Programme
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -52,6 +55,8 @@ data class LiveTvUiState(
     val hiddenGroups: Set<String> = emptySet(),
     val showHidden: Boolean = false,
     val epg: Map<String, List<Programme>> = emptyMap(),
+    /** Per-channel EPG (keyed by channel id) fetched on demand via get_short_epg. */
+    val shortEpg: Map<String, List<Programme>> = emptyMap(),
     val error: String? = null,
 ) {
     private fun visibleGroupChannels() =
@@ -207,18 +212,41 @@ class LiveTvViewModel @Inject constructor(
         _state.value = _state.value.copy(showHidden = !_state.value.showHidden)
     }
 
-    /** Upcoming programmes for a channel (now onward), for the guide rows. */
-    fun upcoming(channel: Channel, limit: Int = 12): List<Programme> {
-        val epgId = channel.epgId ?: return emptyList()
-        val list = _state.value.epg[iptv.normEpgId(epgId)] ?: return emptyList()
-        val now = System.currentTimeMillis()
-        return list.filter { it.stopMs > now }.take(limit)
+    /** All EPG programmes for a channel (sorted): XMLTV if present, else per-channel. */
+    fun programmes(channel: Channel): List<Programme> {
+        val fromXmltv = channel.epgId?.let { _state.value.epg[iptv.normEpgId(it)] }.orEmpty()
+        if (fromXmltv.isNotEmpty()) return fromXmltv
+        return _state.value.shortEpg[channel.id].orEmpty()
     }
 
-    /** All EPG programmes for a channel (sorted), for the timeline guide. */
-    fun programmes(channel: Channel): List<Programme> {
-        val epgId = channel.epgId ?: return emptyList()
-        return _state.value.epg[iptv.normEpgId(epgId)].orEmpty()
+    /** Upcoming programmes for a channel (now onward), for the guide rows. */
+    fun upcoming(channel: Channel, limit: Int = 12): List<Programme> {
+        val now = System.currentTimeMillis()
+        return programmes(channel).filter { it.stopMs > now }.take(limit)
+    }
+
+    /**
+     * Fetch per-channel EPG for the visible channels that don't already have data.
+     * Xtream providers frequently ship an empty global xmltv.php, so this is what
+     * actually fills the guide. Capped and de-duplicated to avoid hammering the API.
+     */
+    fun prefetchGuide(channels: List<Channel>) {
+        viewModelScope.launch {
+            val have = _state.value.shortEpg
+            val todo = channels.asSequence()
+                .filter { it.xtreamStreamId != null }
+                .filter { it.id !in have }
+                .filter { ch -> ch.epgId?.let { _state.value.epg[iptv.normEpgId(it)]?.isNotEmpty() } != true }
+                .take(60)
+                .toList()
+            if (todo.isEmpty()) return@launch
+            val fetched = coroutineScope {
+                todo.map { ch -> async { ch.id to iptv.shortEpg(ch) } }.awaitAll()
+            }.filter { it.second.isNotEmpty() }
+            if (fetched.isNotEmpty()) {
+                _state.value = _state.value.copy(shortEpg = _state.value.shortEpg + fetched)
+            }
+        }
     }
 
     private fun loadEpg() {
@@ -238,8 +266,8 @@ class LiveTvViewModel @Inject constructor(
 
     /** Now/next for a channel, computed against the current wall-clock. */
     fun nowNext(channel: Channel): NowNext {
-        val epgId = channel.epgId ?: return NowNext()
-        val list = _state.value.epg[iptv.normEpgId(epgId)] ?: return NowNext()
+        val list = programmes(channel)
+        if (list.isEmpty()) return NowNext()
         val now = System.currentTimeMillis()
         val current = list.firstOrNull { now in it.startMs until it.stopMs }
         val next = list.firstOrNull { it.startMs >= now }

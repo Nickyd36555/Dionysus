@@ -284,8 +284,46 @@ class IptvRepository @Inject constructor(
                 epgId = o.str("epg_channel_id").takeIf { it.isNotBlank() },
                 playlistId = pl.id,
                 playlistName = pl.name,
+                xtreamStreamId = streamId,
             )
         }
+    }
+
+    /**
+     * Per-channel EPG via Xtream's `get_short_epg` — the reliable source when a
+     * provider's global xmltv.php is empty or disabled. Titles/descriptions are
+     * base64-encoded; timestamps are unix seconds.
+     */
+    suspend fun shortEpg(channel: Channel, limit: Int = 24): List<Programme> {
+        val streamId = channel.xtreamStreamId ?: return emptyList()
+        val pl = runCatching { playlists.first() }.getOrDefault(emptyList())
+            .firstOrNull { it.id == channel.playlistId && it.kind == PlaylistKind.XTREAM } ?: return emptyList()
+        val url = "${pl.host}/player_api.php?username=${pl.username}&password=${pl.password}" +
+            "&action=get_short_epg&stream_id=$streamId&limit=$limit"
+        return runCatching {
+            val root = json.parseToJsonElement(fetchText(url)) as? JsonObject ?: return emptyList()
+            val listings = root["epg_listings"] as? JsonArray ?: return emptyList()
+            listings.mapNotNull { el ->
+                val o = el as? JsonObject ?: return@mapNotNull null
+                val start = o.str("start_timestamp").toLongOrNull()?.times(1000) ?: return@mapNotNull null
+                val stop = o.str("stop_timestamp").toLongOrNull()?.times(1000) ?: (start + 1_800_000)
+                val title = decodeB64(o.str("title")).ifBlank { return@mapNotNull null }
+                Programme(
+                    epgId = channel.id,
+                    startMs = start,
+                    stopMs = stop,
+                    title = title,
+                    description = decodeB64(o.str("description")).take(220),
+                )
+            }.sortedBy { it.startMs }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun decodeB64(value: String): String {
+        if (value.isBlank()) return ""
+        return runCatching {
+            String(android.util.Base64.decode(value, android.util.Base64.DEFAULT)).trim()
+        }.getOrDefault(value)
     }
 
     // XMLTV files (esp. full Xtream guides for 1000s of channels) are big and slow;

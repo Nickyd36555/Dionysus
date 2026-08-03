@@ -34,6 +34,8 @@ data class Channel(
     val epgId: String? = null,
     val playlistId: String,
     val playlistName: String,
+    /** Xtream stream id, used to fetch per-channel EPG via get_short_epg. */
+    val xtreamStreamId: String? = null,
 )
 
 /** One EPG entry (a programme airing on a channel). */
