@@ -294,24 +294,28 @@ fun SettingsScreen(
         }
         items(state.playlists, key = { it.id }) { playlist ->
             Row(
-                modifier = Modifier.fillMaxWidth(0.9f),
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(0.9f).padding(vertical = 6.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.Top,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
                     Text(
-                        text = playlist.name,
+                        text = "${playlist.name}  •  ${if (playlist.kind == "xtream") "Xtream Codes" else "M3U"}",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
-                    Text(
-                        text = if (playlist.kind == "xtream") "Xtream • ${playlist.host}" else "M3U • ${playlist.url}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                    )
+                    // Show the saved details so they can be viewed/copied later.
+                    if (playlist.kind == "xtream") {
+                        PlaylistDetail("Server", playlist.host)
+                        PlaylistDetail("Username", playlist.username)
+                        PlaylistDetail("Password", playlist.password)
+                        PlaylistDetail("EPG URL", playlist.epgUrl)
+                    } else {
+                        PlaylistDetail("M3U URL", playlist.url)
+                        if (playlist.epgUrl.isNotBlank()) PlaylistDetail("EPG URL", playlist.epgUrl)
+                    }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(horizontalAlignment = androidx.compose.ui.Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     AppButton(onClick = { viewModel.editPlaylist(playlist) }) { Text("Edit") }
                     AppButton(onClick = { viewModel.removePlaylist(playlist.id) }) { Text("Remove") }
                 }
@@ -440,6 +444,26 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+/** A label: value line for a saved playlist, selectable so it can be copied. */
+@Composable
+private fun PlaylistDetail(label: String, value: String) {
+    if (value.isBlank()) return
+    Row(modifier = Modifier.padding(top = 2.dp)) {
+        Text(
+            text = "$label: ",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        SelectionContainer {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
