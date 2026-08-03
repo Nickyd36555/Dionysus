@@ -1,28 +1,49 @@
+@file:OptIn(androidx.tv.material3.ExperimentalTvMaterial3Api::class)
+
 package com.dionysus.tv.ui.player
 
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,9 +51,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -40,6 +62,7 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -52,10 +75,17 @@ import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.util.VLCVideoLayout
 
+/** Which secondary panel (if any) is showing over the video. */
+private enum class Panel { NONE, AUDIO, SUBTITLE, SPEED, ASPECT, SYNC }
+
+private val SPEEDS = listOf(0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
+private val ASPECTS = listOf("Fit", "16:9", "4:3", "Zoom", "Original")
+
 /**
- * Internal player backed by LibVLC, which ships software decoders for the codecs
- * device hardware often can't handle (HEVC, AC3/EAC3/DTS/TrueHD, VP9, AV1, …).
- * D-pad: OK toggles play/pause, left/right skip 10s; controls auto-hide.
+ * Full-featured internal player backed by LibVLC (software decoders for HEVC,
+ * AC3/EAC3/DTS/TrueHD, VP9, AV1, …). On-screen controls cover play/pause,
+ * skip, audio & subtitle track selection, playback speed, aspect ratio/zoom,
+ * and audio/subtitle sync — all D-pad navigable, and tap-friendly too.
  */
 @Composable
 fun PlayerScreen(
@@ -63,7 +93,9 @@ fun PlayerScreen(
     viewModel: PlayerViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
-    val focusRequester = remember { FocusRequester() }
+    val rootFocus = remember { FocusRequester() }
+    val barFocus = remember { FocusRequester() }
+    val panelFocus = remember { FocusRequester() }
 
     val libVlc = remember {
         LibVLC(
@@ -74,8 +106,6 @@ fun PlayerScreen(
                 "--live-caching=3000",
                 "--no-drop-late-frames",
                 "--no-skip-frames",
-                // Disable hardware direct-rendering, which causes green/blocky
-                // glitches on many Android TV devices; slight cost, far smoother.
                 "--no-mediacodec-dr",
                 "--no-omxil-dr",
                 "--audio-time-stretch",
@@ -88,18 +118,29 @@ fun PlayerScreen(
     var lengthMs by remember { mutableLongStateOf(0L) }
     var isPlaying by remember { mutableStateOf(true) }
     var controlsVisible by remember { mutableStateOf(true) }
-    var interaction by remember { mutableStateOf(0) }
+    var interaction by remember { mutableIntStateOf(0) }
     var seeked by remember { mutableStateOf(false) }
-    var showTracks by remember { mutableStateOf(false) }
-    val tracksFocus = remember { FocusRequester() }
+    var panel by remember { mutableStateOf(Panel.NONE) }
+
+    // User-adjustable playback settings.
+    var speed by remember { mutableStateOf(1.0f) }
+    var aspect by remember { mutableStateOf("Fit") }
+    var audioDelayMs by remember { mutableLongStateOf(0L) }
+    var subDelayMs by remember { mutableLongStateOf(0L) }
+
+    val isLive = lengthMs <= 0
 
     fun bump() { controlsVisible = true; interaction++ }
-    fun togglePlay() { if (player.isPlaying) player.pause() else player.play() }
+    fun showControls() { controlsVisible = true; interaction++ }
+    fun togglePlay() { if (player.isPlaying) player.pause() else player.play(); bump() }
     fun seekBy(deltaMs: Long) {
         val len = player.length
         val target = (player.time + deltaMs).coerceIn(0L, if (len > 0) len else Long.MAX_VALUE)
         player.time = target
+        positionMs = target
+        bump()
     }
+    fun closePanel() { panel = Panel.NONE; bump() }
 
     DisposableEffect(Unit) {
         val media = Media(libVlc, Uri.parse(viewModel.url)).apply { setHWDecoderEnabled(true, false) }
@@ -114,6 +155,12 @@ fun PlayerScreen(
             libVlc.release()
         }
     }
+
+    // Apply playback settings whenever the user changes them.
+    LaunchedEffect(speed) { runCatching { player.rate = speed } }
+    LaunchedEffect(aspect) { runCatching { applyAspect(player, aspect) } }
+    LaunchedEffect(audioDelayMs) { runCatching { player.audioDelay = audioDelayMs * 1000 } }
+    LaunchedEffect(subDelayMs) { runCatching { player.spuDelay = subDelayMs * 1000 } }
 
     // Poll player for UI + apply the resume point once the length is known.
     LaunchedEffect(Unit) {
@@ -138,22 +185,33 @@ fun PlayerScreen(
         }
     }
 
-    // Auto-hide controls a few seconds after the last interaction.
-    LaunchedEffect(interaction) {
+    // Auto-hide controls after inactivity — but never while a panel is open.
+    LaunchedEffect(interaction, panel) {
+        if (panel != Panel.NONE) return@LaunchedEffect
         controlsVisible = true
-        delay(4_000)
+        delay(6_000)
         controlsVisible = false
     }
 
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    // Keep focus where it belongs as the UI state changes.
+    LaunchedEffect(controlsVisible, panel) {
+        runCatching {
+            when {
+                panel != Panel.NONE -> panelFocus.requestFocus()
+                controlsVisible -> barFocus.requestFocus()
+                else -> rootFocus.requestFocus()
+            }
+        }
+    }
 
     BackHandler {
-        if (showTracks) {
-            showTracks = false
-            focusRequester.requestFocus()
-        } else {
-            viewModel.saveProgress(player.time, player.length)
-            onBack()
+        when {
+            panel != Panel.NONE -> closePanel()
+            controlsVisible -> { controlsVisible = false; runCatching { rootFocus.requestFocus() } }
+            else -> {
+                viewModel.saveProgress(player.time, player.length)
+                onBack()
+            }
         }
     }
 
@@ -161,21 +219,21 @@ fun PlayerScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .focusRequester(focusRequester)
+            .focusRequester(rootFocus)
             .focusable()
             .pointerInput(Unit) {
                 detectTapGestures { controlsVisible = !controlsVisible; interaction++ }
             }
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                // Only handles keys when the control bar isn't focused (controls hidden).
                 when (event.key) {
                     Key.DirectionCenter, Key.Enter, Key.Spacebar, Key.MediaPlayPause -> {
-                        togglePlay(); bump(); true
+                        if (controlsVisible) togglePlay() else showControls(); true
                     }
-                    Key.DirectionLeft, Key.MediaRewind -> { seekBy(-10_000); bump(); true }
-                    Key.DirectionRight, Key.MediaFastForward -> { seekBy(10_000); bump(); true }
-                    Key.DirectionUp -> { showTracks = true; true }
-                    Key.DirectionDown -> { bump(); true }
+                    Key.DirectionLeft, Key.MediaRewind -> { seekBy(-10_000); true }
+                    Key.DirectionRight, Key.MediaFastForward -> { seekBy(10_000); true }
+                    Key.DirectionUp, Key.DirectionDown -> { showControls(); true }
                     else -> false
                 }
             },
@@ -184,7 +242,6 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
                 VLCVideoLayout(ctx).also { layout ->
-                    // Keep focus on the Compose key handler, not the video surface.
                     layout.isFocusable = false
                     layout.isFocusableInTouchMode = false
                     layout.descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
@@ -193,81 +250,54 @@ fun PlayerScreen(
             },
         )
 
-        if (controlsVisible && !showTracks) {
-            PlayerControls(
-                title = viewModel.title,
-                isPlaying = isPlaying,
-                positionMs = positionMs,
-                lengthMs = lengthMs,
-                modifier = Modifier.align(Alignment.BottomCenter),
-            )
-        }
-
-        if (showTracks) {
-            LaunchedEffect(Unit) { runCatching { tracksFocus.requestFocus() } }
-            TrackMenu(
-                audioTracks = runCatching { player.audioTracks?.toList() }.getOrNull().orEmpty(),
-                subtitleTracks = runCatching { player.spuTracks?.toList() }.getOrNull().orEmpty(),
-                currentAudio = player.audioTrack,
-                currentSubtitle = player.spuTrack,
-                firstFocus = tracksFocus,
-                onSelectAudio = { id -> player.audioTrack = id; showTracks = false; focusRequester.requestFocus() },
-                onSelectSubtitle = { id -> player.spuTrack = id; showTracks = false; focusRequester.requestFocus() },
+        // Secondary panels (audio/subtitle/speed/aspect/sync).
+        if (panel != Panel.NONE) {
+            OptionsPanel(
+                panel = panel,
+                player = player,
+                speed = speed,
+                aspect = aspect,
+                audioDelayMs = audioDelayMs,
+                subDelayMs = subDelayMs,
+                firstFocus = panelFocus,
+                onSelectAudio = { player.audioTrack = it; closePanel() },
+                onSelectSubtitle = { player.spuTrack = it; closePanel() },
+                onSelectSpeed = { speed = it; closePanel() },
+                onSelectAspect = { aspect = it; closePanel() },
+                onAudioDelay = { audioDelayMs += it; bump() },
+                onSubDelay = { subDelayMs += it; bump() },
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
         }
-    }
-}
 
-@Composable
-private fun TrackMenu(
-    audioTracks: List<MediaPlayer.TrackDescription>,
-    subtitleTracks: List<MediaPlayer.TrackDescription>,
-    currentAudio: Int,
-    currentSubtitle: Int,
-    firstFocus: FocusRequester,
-    onSelectAudio: (Int) -> Unit,
-    onSelectSubtitle: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    androidx.compose.foundation.lazy.LazyColumn(
-        modifier = modifier
-            .fillMaxWidth(0.42f)
-            .background(Color(0xF0101014))
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        item {
-            Text("Audio", style = MaterialTheme.typography.titleLarge, color = Color.White)
-        }
-        itemsIndexed(audioTracks) { index, track ->
-            TrackButton(
-                label = track.name + if (track.id == currentAudio) "  ✓" else "",
-                onClick = { onSelectAudio(track.id) },
-                modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier,
-            )
-        }
-        item {
-            Text(
-                "Subtitles",
-                style = MaterialTheme.typography.titleLarge,
-                color = Color.White,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-        }
-        items(subtitleTracks) { track ->
-            TrackButton(
-                label = track.name + if (track.id == currentSubtitle) "  ✓" else "",
-                onClick = { onSelectSubtitle(track.id) },
+        if (controlsVisible) {
+            PlayerControls(
+                title = viewModel.title,
+                isPlaying = isPlaying,
+                isLive = isLive,
+                positionMs = positionMs,
+                lengthMs = lengthMs,
+                speed = speed,
+                barFocus = barFocus,
+                onTogglePlay = { togglePlay() },
+                onSeekBack = { seekBy(-10_000) },
+                onSeekForward = { seekBy(10_000) },
+                onSeekTo = { player.time = it; positionMs = it; bump() },
+                onOpenPanel = { panel = it; interaction++ },
+                modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
     }
 }
 
-@Composable
-private fun TrackButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    com.dionysus.tv.ui.components.AppButton(onClick = onClick, modifier = modifier.fillMaxWidth()) {
-        Text(label)
+/** Applies an aspect-ratio / zoom preset to the running player. */
+private fun applyAspect(player: MediaPlayer, mode: String) {
+    when (mode) {
+        "16:9" -> { player.setAspectRatio("16:9"); player.setScale(0f) }
+        "4:3" -> { player.setAspectRatio("4:3"); player.setScale(0f) }
+        "Zoom" -> { player.setAspectRatio(null); player.setScale(1.3f) }
+        "Original" -> { player.setAspectRatio(null); player.setScale(1.0f) }
+        else -> { player.setAspectRatio(null); player.setScale(0f) } // Fit
     }
 }
 
@@ -275,55 +305,264 @@ private fun TrackButton(label: String, onClick: () -> Unit, modifier: Modifier =
 private fun PlayerControls(
     title: String,
     isPlaying: Boolean,
+    isLive: Boolean,
     positionMs: Long,
     lengthMs: Long,
+    speed: Float,
+    barFocus: FocusRequester,
+    onTogglePlay: () -> Unit,
+    onSeekBack: () -> Unit,
+    onSeekForward: () -> Unit,
+    onSeekTo: (Long) -> Unit,
+    onOpenPanel: (Panel) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color(0xCC000000))
-            .padding(horizontal = 48.dp, vertical = 24.dp),
+            .background(Color(0xE6000000))
+            .padding(horizontal = 40.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleLarge,
-            color = Color.White,
-        )
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Icon(
-                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                contentDescription = if (isPlaying) "Pause" else "Play",
-                tint = Color.White,
-                modifier = Modifier.clip(RoundedCornerShape(24.dp)),
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
             )
-            Text(formatTime(positionMs), style = MaterialTheme.typography.bodyMedium, color = Color.White)
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(Color(0x55FFFFFF)),
-            ) {
-                val fraction = if (lengthMs > 0) (positionMs.toFloat() / lengthMs).coerceIn(0f, 1f) else 0f
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(fraction)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(MaterialTheme.colorScheme.primary),
+            if (isLive) {
+                Text(
+                    "● LIVE",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color(0xFFFF5252),
                 )
             }
-            Text(formatTime(lengthMs), style = MaterialTheme.typography.bodyMedium, color = Color.White)
         }
-        Text(
-            text = "OK: play/pause   ◄ ►: skip 10s   ▲: audio/subtitles   Back: exit",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xAAFFFFFF),
+
+        if (!isLive) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(formatTime(positionMs), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                SeekBar(
+                    positionMs = positionMs,
+                    lengthMs = lengthMs,
+                    onSeekTo = onSeekTo,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(formatTime(lengthMs), style = MaterialTheme.typography.bodyMedium, color = Color.White)
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ControlButton(
+                icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                label = if (isPlaying) "Pause" else "Play",
+                modifier = Modifier.focusRequester(barFocus),
+                onClick = onTogglePlay,
+            )
+            if (!isLive) {
+                ControlButton(Icons.Default.Replay10, "-10s", onClick = onSeekBack)
+                ControlButton(Icons.Default.Forward10, "+10s", onClick = onSeekForward)
+            }
+            ControlButton(Icons.Default.Audiotrack, "Audio") { onOpenPanel(Panel.AUDIO) }
+            ControlButton(Icons.Default.Subtitles, "Subtitles") { onOpenPanel(Panel.SUBTITLE) }
+            ControlButton(Icons.Default.Speed, "${trimSpeed(speed)}x") { onOpenPanel(Panel.SPEED) }
+            ControlButton(Icons.Default.AspectRatio, "Aspect") { onOpenPanel(Panel.ASPECT) }
+            ControlButton(Icons.Default.Tune, "Sync") { onOpenPanel(Panel.SYNC) }
+        }
+    }
+}
+
+/** A focusable seek bar: Left/Right scrubs ±10s while it has focus. */
+@Composable
+private fun SeekBar(
+    positionMs: Long,
+    lengthMs: Long,
+    onSeekTo: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val fraction = if (lengthMs > 0) (positionMs.toFloat() / lengthMs).coerceIn(0f, 1f) else 0f
+    Box(
+        modifier = modifier
+            .height(if (focused) 10.dp else 5.dp)
+            .clip(RoundedCornerShape(3.dp))
+            .background(Color(0x55FFFFFF))
+            .focusable(interactionSource = interaction)
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                when (event.key) {
+                    Key.DirectionLeft -> {
+                        onSeekTo((positionMs - 10_000).coerceAtLeast(0)); true
+                    }
+                    Key.DirectionRight -> {
+                        onSeekTo((positionMs + 10_000).coerceAtMost(lengthMs)); true
+                    }
+                    else -> false
+                }
+            },
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(fraction)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(3.dp))
+                .background(MaterialTheme.colorScheme.primary),
         )
     }
 }
+
+@Composable
+private fun ControlButton(
+    icon: ImageVector,
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val shape = RoundedCornerShape(10.dp)
+    val bg = if (focused) MaterialTheme.colorScheme.primary else Color(0x33FFFFFF)
+    val fg = if (focused) MaterialTheme.colorScheme.onPrimary else Color.White
+    Column(
+        modifier = modifier
+            .clip(shape)
+            .background(bg)
+            .then(if (focused) Modifier.border(2.dp, Color.White, shape) else Modifier)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Icon(icon, contentDescription = label, tint = fg, modifier = Modifier.size(26.dp))
+        Text(label, color = fg, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+    }
+}
+
+@Composable
+private fun OptionsPanel(
+    panel: Panel,
+    player: MediaPlayer,
+    speed: Float,
+    aspect: String,
+    audioDelayMs: Long,
+    subDelayMs: Long,
+    firstFocus: FocusRequester,
+    onSelectAudio: (Int) -> Unit,
+    onSelectSubtitle: (Int) -> Unit,
+    onSelectSpeed: (Float) -> Unit,
+    onSelectAspect: (String) -> Unit,
+    onAudioDelay: (Long) -> Unit,
+    onSubDelay: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier
+            .fillMaxHeight()
+            .fillMaxWidth(0.42f)
+            .background(Color(0xF2101014))
+            .padding(28.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        when (panel) {
+            Panel.AUDIO -> {
+                item { PanelTitle("Audio Track") }
+                val tracks = runCatching { player.audioTracks?.toList() }.getOrNull().orEmpty()
+                val current = player.audioTrack
+                if (tracks.isEmpty()) item { PanelHint("No audio tracks reported.") }
+                itemsIndexed(tracks) { index, track ->
+                    PanelRow(
+                        label = track.name + if (track.id == current) "   ✓" else "",
+                        onClick = { onSelectAudio(track.id) },
+                        modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier,
+                    )
+                }
+            }
+            Panel.SUBTITLE -> {
+                item { PanelTitle("Subtitles") }
+                val tracks = runCatching { player.spuTracks?.toList() }.getOrNull().orEmpty()
+                val current = player.spuTrack
+                itemsIndexed(tracks) { index, track ->
+                    PanelRow(
+                        label = track.name + if (track.id == current) "   ✓" else "",
+                        onClick = { onSelectSubtitle(track.id) },
+                        modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier,
+                    )
+                }
+                if (tracks.isEmpty()) item { PanelHint("No subtitles in this stream.") }
+            }
+            Panel.SPEED -> {
+                item { PanelTitle("Playback Speed") }
+                itemsIndexed(SPEEDS) { index, value ->
+                    PanelRow(
+                        label = "${trimSpeed(value)}x" + if (value == speed) "   ✓" else "",
+                        onClick = { onSelectSpeed(value) },
+                        modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier,
+                    )
+                }
+            }
+            Panel.ASPECT -> {
+                item { PanelTitle("Aspect Ratio") }
+                itemsIndexed(ASPECTS) { index, value ->
+                    PanelRow(
+                        label = value + if (value == aspect) "   ✓" else "",
+                        onClick = { onSelectAspect(value) },
+                        modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier,
+                    )
+                }
+            }
+            Panel.SYNC -> {
+                item { PanelTitle("Audio & Subtitle Sync") }
+                item { PanelHint("Audio delay: ${audioDelayMs} ms") }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        PanelRow(label = "Audio −50ms", onClick = { onAudioDelay(-50) }, modifier = Modifier.weight(1f).focusRequester(firstFocus))
+                        PanelRow(label = "Audio +50ms", onClick = { onAudioDelay(50) }, modifier = Modifier.weight(1f))
+                    }
+                }
+                item { PanelHint("Subtitle delay: ${subDelayMs} ms") }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        PanelRow(label = "Subs −50ms", onClick = { onSubDelay(-50) }, modifier = Modifier.weight(1f))
+                        PanelRow(label = "Subs +50ms", onClick = { onSubDelay(50) }, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+            Panel.NONE -> Unit
+        }
+    }
+}
+
+@Composable
+private fun PanelTitle(text: String) {
+    Text(text, style = MaterialTheme.typography.titleLarge, color = Color.White)
+    Spacer(Modifier.height(4.dp))
+}
+
+@Composable
+private fun PanelHint(text: String) {
+    Text(text, style = MaterialTheme.typography.bodyMedium, color = Color(0xBBFFFFFF))
+}
+
+@Composable
+private fun PanelRow(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    com.dionysus.tv.ui.components.AppButton(onClick = onClick, modifier = modifier.fillMaxWidth()) {
+        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+private fun trimSpeed(value: Float): String =
+    if (value % 1f == 0f) value.toInt().toString() else value.toString().trimEnd('0').trimEnd('.')
 
 private fun formatTime(ms: Long): String {
     if (ms <= 0) return "0:00"

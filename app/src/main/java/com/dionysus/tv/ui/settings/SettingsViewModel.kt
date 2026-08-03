@@ -11,6 +11,8 @@ import com.dionysus.tv.data.backup.BackupRepository
 import com.dionysus.tv.data.debrid.DebridRepository
 import com.dionysus.tv.data.debrid.realdebrid.RealDebridAuth
 import com.dionysus.tv.data.debrid.realdebrid.RdDeviceCode
+import com.dionysus.tv.data.iptv.IptvRepository
+import com.dionysus.tv.data.iptv.StoredPlaylist
 import com.dionysus.tv.data.local.HomeLayoutRepository
 import com.dionysus.tv.data.scraper.ScraperRepository
 import com.dionysus.tv.data.settings.SettingsRepository
@@ -48,6 +50,15 @@ data class SettingsUiState(
     val addonUrlInput: String = "",
     val syncCode: String? = null,
     val importCodeInput: String = "",
+    // Live TV (IPTV)
+    val playlists: List<StoredPlaylist> = emptyList(),
+    val m3uName: String = "",
+    val m3uUrl: String = "",
+    val m3uEpgUrl: String = "",
+    val xtreamName: String = "",
+    val xtreamHost: String = "",
+    val xtreamUser: String = "",
+    val xtreamPass: String = "",
 )
 
 @HiltViewModel
@@ -60,6 +71,7 @@ class SettingsViewModel @Inject constructor(
     private val playerLauncher: PlayerLauncher,
     private val addonRepository: AddonRepository,
     private val backup: BackupRepository,
+    private val iptv: IptvRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SettingsUiState())
@@ -73,6 +85,59 @@ class SettingsViewModel @Inject constructor(
         addonRepository.installedAddons
             .onEach { list -> _state.value = _state.value.copy(addons = list) }
             .launchIn(viewModelScope)
+        iptv.playlists
+            .onEach { list -> _state.value = _state.value.copy(playlists = list) }
+            .launchIn(viewModelScope)
+    }
+
+    // ---- Live TV (IPTV) ---------------------------------------------------
+    fun setM3uName(v: String) { _state.value = _state.value.copy(m3uName = v) }
+    fun setM3uUrl(v: String) { _state.value = _state.value.copy(m3uUrl = v) }
+    fun setM3uEpgUrl(v: String) { _state.value = _state.value.copy(m3uEpgUrl = v) }
+    fun setXtreamName(v: String) { _state.value = _state.value.copy(xtreamName = v) }
+    fun setXtreamHost(v: String) { _state.value = _state.value.copy(xtreamHost = v) }
+    fun setXtreamUser(v: String) { _state.value = _state.value.copy(xtreamUser = v) }
+    fun setXtreamPass(v: String) { _state.value = _state.value.copy(xtreamPass = v) }
+
+    fun addM3uPlaylist() {
+        val s = _state.value
+        if (s.m3uUrl.isBlank()) return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(statusMessage = "Adding playlist…")
+            when (val r = iptv.addM3u(s.m3uName, s.m3uUrl, s.m3uEpgUrl)) {
+                is DataResult.Success -> _state.value = _state.value.copy(
+                    m3uName = "", m3uUrl = "", m3uEpgUrl = "",
+                    statusMessage = "Playlist added.",
+                )
+                is DataResult.Error -> _state.value = _state.value.copy(
+                    statusMessage = "Couldn't add playlist: ${r.message}",
+                )
+            }
+        }
+    }
+
+    fun addXtreamPlaylist() {
+        val s = _state.value
+        if (s.xtreamHost.isBlank() || s.xtreamUser.isBlank()) return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(statusMessage = "Connecting to Xtream server…")
+            when (val r = iptv.addXtream(s.xtreamName, s.xtreamHost, s.xtreamUser, s.xtreamPass)) {
+                is DataResult.Success -> _state.value = _state.value.copy(
+                    xtreamName = "", xtreamHost = "", xtreamUser = "", xtreamPass = "",
+                    statusMessage = "Xtream account added.",
+                )
+                is DataResult.Error -> _state.value = _state.value.copy(
+                    statusMessage = "Couldn't add Xtream account: ${r.message}",
+                )
+            }
+        }
+    }
+
+    fun removePlaylist(id: String) {
+        viewModelScope.launch {
+            iptv.remove(id)
+            _state.value = _state.value.copy(statusMessage = "Playlist removed.")
+        }
     }
 
     fun setAddonUrl(url: String) {

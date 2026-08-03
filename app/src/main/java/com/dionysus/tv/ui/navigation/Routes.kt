@@ -6,6 +6,7 @@ import android.net.Uri
 object Routes {
     const val SPLASH = "splash"
     const val HOME = "home"
+    const val LIVE_TV = "livetv"
     const val SEARCH = "search"
     const val DOWNLOADS = "downloads"
     const val SETTINGS = "settings"
@@ -35,6 +36,7 @@ object Routes {
 /** Top-level destinations shown in the navigation rail. */
 enum class TopLevelDestination(val route: String, val label: String) {
     HOME(Routes.HOME, "Home"),
+    LIVE_TV(Routes.LIVE_TV, "Live TV"),
     SEARCH(Routes.SEARCH, "Search"),
     DOWNLOADS(Routes.DOWNLOADS, "Downloads"),
     SETTINGS(Routes.SETTINGS, "Settings"),

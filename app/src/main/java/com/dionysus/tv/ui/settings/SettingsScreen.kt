@@ -226,6 +226,65 @@ fun SettingsScreen(
             }
         }
 
+        // ---- Live TV (IPTV) ------------------------------------------------
+        item { SectionHeader("Live TV (IPTV)") }
+        item {
+            Column(
+                modifier = Modifier.fillMaxWidth(0.85f),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    "Add an M3U/M3U8 playlist URL, or connect an Xtream Codes account. Channels appear under Live TV in the sidebar. Add an EPG (XMLTV) URL to see what's on now.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "M3U playlist",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                SettingTextField(label = "Name (optional)", value = state.m3uName, onValueChange = viewModel::setM3uName)
+                SettingTextField(label = "M3U / M3U8 URL", value = state.m3uUrl, onValueChange = viewModel::setM3uUrl)
+                SettingTextField(label = "EPG (XMLTV) URL — optional", value = state.m3uEpgUrl, onValueChange = viewModel::setM3uEpgUrl)
+                AppButton(onClick = viewModel::addM3uPlaylist) { Text("Add M3U playlist") }
+
+                Text(
+                    "Xtream Codes account",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                SettingTextField(label = "Name (optional)", value = state.xtreamName, onValueChange = viewModel::setXtreamName)
+                SettingTextField(label = "Server URL (http://host:port)", value = state.xtreamHost, onValueChange = viewModel::setXtreamHost)
+                SettingTextField(label = "Username", value = state.xtreamUser, onValueChange = viewModel::setXtreamUser)
+                SettingTextField(label = "Password", value = state.xtreamPass, onValueChange = viewModel::setXtreamPass, isSecret = true)
+                AppButton(onClick = viewModel::addXtreamPlaylist) { Text("Add Xtream account") }
+            }
+        }
+        items(state.playlists, key = { it.id }) { playlist ->
+            Row(
+                modifier = Modifier.fillMaxWidth(0.9f),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                    Text(
+                        text = playlist.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = if (playlist.kind == "xtream") "Xtream • ${playlist.host}" else "M3U • ${playlist.url}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
+                AppButton(onClick = { viewModel.removePlaylist(playlist.id) }) { Text("Remove") }
+            }
+        }
+
         // ---- Players -------------------------------------------------------
         item { SectionHeader("Preferred Player") }
         items(state.availablePlayers, key = { it.id }) { player ->
