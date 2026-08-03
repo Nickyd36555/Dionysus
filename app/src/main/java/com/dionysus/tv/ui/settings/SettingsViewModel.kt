@@ -60,6 +60,7 @@ data class SettingsUiState(
     val xtreamHost: String = "",
     val xtreamUser: String = "",
     val xtreamPass: String = "",
+    val editingPlaylistId: String? = null,
 )
 
 @HiltViewModel
@@ -104,14 +105,17 @@ class SettingsViewModel @Inject constructor(
         val s = _state.value
         if (s.m3uUrl.isBlank()) return
         viewModelScope.launch {
-            _state.value = _state.value.copy(statusMessage = "Adding playlist…")
+            _state.value = _state.value.copy(statusMessage = if (s.editingPlaylistId != null) "Saving playlist…" else "Adding playlist…")
             when (val r = iptv.addM3u(s.m3uName, s.m3uUrl, s.m3uEpgUrl)) {
-                is DataResult.Success -> _state.value = _state.value.copy(
-                    m3uName = "", m3uUrl = "", m3uEpgUrl = "",
-                    statusMessage = "Playlist added.",
-                )
+                is DataResult.Success -> {
+                    s.editingPlaylistId?.let { iptv.remove(it) }
+                    _state.value = _state.value.copy(
+                        m3uName = "", m3uUrl = "", m3uEpgUrl = "", editingPlaylistId = null,
+                        statusMessage = "Playlist saved.",
+                    )
+                }
                 is DataResult.Error -> _state.value = _state.value.copy(
-                    statusMessage = "Couldn't add playlist: ${r.message}",
+                    statusMessage = "Couldn't save playlist: ${r.message}",
                 )
             }
         }
@@ -123,14 +127,39 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = _state.value.copy(statusMessage = "Connecting to Xtream server…")
             when (val r = iptv.addXtream(s.xtreamName, s.xtreamHost, s.xtreamUser, s.xtreamPass)) {
-                is DataResult.Success -> _state.value = _state.value.copy(
-                    xtreamName = "", xtreamHost = "", xtreamUser = "", xtreamPass = "",
-                    statusMessage = "Xtream account added.",
-                )
+                is DataResult.Success -> {
+                    s.editingPlaylistId?.let { iptv.remove(it) }
+                    _state.value = _state.value.copy(
+                        xtreamName = "", xtreamHost = "", xtreamUser = "", xtreamPass = "", editingPlaylistId = null,
+                        statusMessage = "Xtream account saved.",
+                    )
+                }
                 is DataResult.Error -> _state.value = _state.value.copy(
-                    statusMessage = "Couldn't add Xtream account: ${r.message}",
+                    statusMessage = "Couldn't save Xtream account: ${r.message}",
                 )
             }
+        }
+    }
+
+    /** Load a stored playlist into the matching input fields for editing. */
+    fun editPlaylist(playlist: StoredPlaylist) {
+        _state.value = if (playlist.kind == "xtream") {
+            _state.value.copy(
+                editingPlaylistId = playlist.id,
+                xtreamName = playlist.name,
+                xtreamHost = playlist.host,
+                xtreamUser = playlist.username,
+                xtreamPass = playlist.password,
+                statusMessage = "Editing \"${playlist.name}\" — change fields and press Add Xtream account to save.",
+            )
+        } else {
+            _state.value.copy(
+                editingPlaylistId = playlist.id,
+                m3uName = playlist.name,
+                m3uUrl = playlist.url,
+                m3uEpgUrl = playlist.epgUrl,
+                statusMessage = "Editing \"${playlist.name}\" — change fields and press Add M3U playlist to save.",
+            )
         }
     }
 

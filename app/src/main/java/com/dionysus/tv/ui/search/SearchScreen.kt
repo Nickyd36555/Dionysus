@@ -3,6 +3,7 @@
 package com.dionysus.tv.ui.search
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -24,7 +25,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,6 +55,7 @@ fun SearchScreen(
 ) {
     val query by viewModel.query.collectAsStateWithLifecycle()
     val results by viewModel.results.collectAsStateWithLifecycle()
+    var filter by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(SearchFilter.ALL) }
 
     // VOD/Live items play directly; catalog items open their detail page.
     val open: (MediaItem) -> Unit = { item ->
@@ -67,6 +71,15 @@ fun SearchScreen(
     ) {
         SearchField(value = query, onValueChange = viewModel::onQueryChange)
 
+        Row(
+            modifier = Modifier.padding(top = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            SearchFilter.entries.forEach { f ->
+                FilterPill(label = f.label, selected = filter == f, onClick = { filter = f })
+            }
+        }
+
         if (results.isEmpty() && query.trim().length >= 2) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
@@ -80,17 +93,45 @@ fun SearchScreen(
             val movies = results.filter { it.source != MediaSource.LIVE_TV && it.type == MediaType.MOVIE }
             val shows = results.filter { it.source != MediaSource.LIVE_TV && it.type == MediaType.TV_SHOW }
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(160.dp),
-                contentPadding = PaddingValues(top = 24.dp, bottom = 24.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
+                columns = GridCells.Adaptive(124.dp),
+                contentPadding = PaddingValues(top = 20.dp, bottom = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
-                liveSection("On Live TV", live, open)
-                section("Movies", movies, open)
-                section("TV Shows", shows, open)
+                if (filter == SearchFilter.ALL || filter == SearchFilter.LIVE) liveSection("On Live TV", live, open)
+                if (filter == SearchFilter.ALL || filter == SearchFilter.MOVIES) section("Movies", movies, open)
+                if (filter == SearchFilter.ALL || filter == SearchFilter.TV) section("TV Shows", shows, open)
             }
         }
     }
+}
+
+private enum class SearchFilter(val label: String) {
+    ALL("All"), MOVIES("Movies"), TV("TV Shows"), LIVE("Live TV")
+}
+
+@Composable
+private fun FilterPill(label: String, selected: Boolean, onClick: () -> Unit) {
+    val interaction = androidx.compose.runtime.remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val shape = RoundedCornerShape(20.dp)
+    val bg = when {
+        focused -> MaterialTheme.colorScheme.primary
+        selected -> MaterialTheme.colorScheme.surfaceVariant
+        else -> Color.Transparent
+    }
+    val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    Text(
+        text = label,
+        style = MaterialTheme.typography.titleSmall,
+        color = fg,
+        modifier = Modifier
+            .clip(shape)
+            .background(bg)
+            .then(if (selected && !focused) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, shape) else Modifier)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 8.dp),
+    )
 }
 
 /** A full-width header followed by that type's cards, within one grid. */
@@ -109,7 +150,7 @@ private fun LazyGridScope.section(
         )
     }
     items(items, key = { it.id }) { item ->
-        MediaCard(item = item, onClick = { onOpen(item) }, showSourceBadge = true)
+        MediaCard(item = item, onClick = { onOpen(item) }, showSourceBadge = true, showTitle = true)
     }
 }
 

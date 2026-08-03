@@ -35,8 +35,11 @@ import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -78,11 +81,12 @@ fun LiveTvScreen(
                 modifier = Modifier.weight(1f),
             )
             if (state.hasPlaylists) {
-                ModeToggle(
-                    mode = state.mode,
-                    hasVod = state.hasVod,
-                    onSelect = viewModel::setMode,
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TogglePill("Live TV", state.mode == LiveTvMode.LIVE) { viewModel.setMode(LiveTvMode.LIVE) }
+                    if (state.hasVod) {
+                        TogglePill("Movies (VOD)", state.mode == LiveTvMode.VOD) { viewModel.setMode(LiveTvMode.VOD) }
+                    }
+                }
             }
         }
 
@@ -90,11 +94,6 @@ fun LiveTvScreen(
             !state.hasPlaylists && !state.isLoading -> EmptyState()
             state.isLoading && state.channels.isEmpty() && state.vod.isEmpty() ->
                 CenterMessage("Loading channels…")
-            state.mode == LiveTvMode.GUIDE -> EpgGuide(
-                channels = state.guideChannels,
-                programmesFor = viewModel::programmes,
-                onPlay = onPlay,
-            )
             state.mode == LiveTvMode.VOD -> Row(Modifier.fillMaxSize().padding(top = 12.dp)) {
                 SimpleCategoryRail(
                     categories = state.vodCategories,
@@ -106,39 +105,119 @@ fun LiveTvScreen(
                     VodGrid(vod = state.visibleVod, onPlay = onPlay)
                 }
             }
-            else -> Row(Modifier.fillMaxSize().padding(top = 12.dp)) {
-                CategoryRail(
-                    state = state,
-                    onRow = viewModel::onRowSelected,
-                    onSub = viewModel::selectSub,
-                    onBack = viewModel::backToGroups,
-                    onHideGroup = viewModel::hideGroup,
-                    onToggleHidden = viewModel::toggleShowHidden,
-                    modifier = Modifier.width(260.dp).fillMaxHeight(),
-                )
-                Box(Modifier.fillMaxSize().padding(start = 16.dp)) {
-                    ChannelGrid(
-                        channels = state.visibleChannels,
-                        favorites = state.favorites,
-                        error = state.error,
-                        nowTitleFor = { viewModel.nowNext(it).now?.title },
-                        onPlay = onPlay,
-                        onToggleFavorite = viewModel::toggleFavorite,
-                    )
-                }
+            else -> LiveView(
+                state = state,
+                viewModel = viewModel,
+                onPlay = onPlay,
+            )
+        }
+    }
+}
+
+/** Combined Live TV view: category rail + now/next preview + timeline guide. */
+@Composable
+private fun LiveView(
+    state: LiveTvUiState,
+    viewModel: LiveTvViewModel,
+    onPlay: (String, String) -> Unit,
+) {
+    val channels = state.visibleChannels
+    var previewChannel by androidx.compose.runtime.remember(state.selectedCategory) {
+        androidx.compose.runtime.mutableStateOf<Channel?>(null)
+    }
+    val preview = previewChannel ?: channels.firstOrNull()
+
+    Row(Modifier.fillMaxSize().padding(top = 12.dp)) {
+        CategoryRail(
+            state = state,
+            onRow = viewModel::onRowSelected,
+            onSub = viewModel::selectSub,
+            onBack = viewModel::backToGroups,
+            onHideGroup = viewModel::hideGroup,
+            onToggleHidden = viewModel::toggleShowHidden,
+            modifier = Modifier.width(260.dp).fillMaxHeight(),
+        )
+        Column(Modifier.fillMaxSize().padding(start = 16.dp)) {
+            if (preview != null) {
+                NowNextPreview(channel = preview, nowNext = viewModel.nowNext(preview))
             }
+            EpgGuide(
+                channels = channels,
+                favorites = state.favorites,
+                programmesFor = viewModel::programmes,
+                onPlay = onPlay,
+                onFocusChannel = { previewChannel = it },
+                onToggleFavorite = viewModel::toggleFavorite,
+            )
         }
     }
 }
 
 @Composable
-private fun ModeToggle(mode: LiveTvMode, hasVod: Boolean, onSelect: (LiveTvMode) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        TogglePill("Channels", mode == LiveTvMode.CHANNELS) { onSelect(LiveTvMode.CHANNELS) }
-        if (hasVod) {
-            TogglePill("Movies (VOD)", mode == LiveTvMode.VOD) { onSelect(LiveTvMode.VOD) }
+private fun NowNextPreview(channel: Channel, nowNext: com.dionysus.tv.data.iptv.NowNext) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 12.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF14141C))
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier.size(120.dp, 68.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF0B0B10)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (channel.logo != null) {
+                AsyncImage(
+                    model = channel.logo,
+                    contentDescription = channel.name,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize().padding(8.dp),
+                )
+            } else {
+                Text(channel.name.take(2).uppercase(), color = MaterialTheme.colorScheme.primary)
+            }
         }
-        TogglePill("TV Guide", mode == LiveTvMode.GUIDE) { onSelect(LiveTvMode.GUIDE) }
+        Column(Modifier.weight(1f).padding(start = 16.dp)) {
+            Text(channel.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
+            val now = nowNext.now
+            if (now != null) {
+                Text(
+                    "Now: ${now.title}",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    "${formatClock(now.startMs)}–${formatClock(now.stopMs)}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (now.description.isNotBlank()) {
+                    Text(
+                        now.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            } else {
+                Text("Press to watch live", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            nowNext.next?.let { next ->
+                Text(
+                    "Up next: ${next.title} · ${formatClock(next.startMs)}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
     }
 }
 
@@ -364,16 +443,17 @@ private fun VodGrid(vod: List<com.dionysus.tv.core.model.MediaItem>, onPlay: (St
         return
     }
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(160.dp),
+        columns = GridCells.Adaptive(124.dp),
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(8.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         gridItems(vod, key = { it.id }) { item ->
             MediaCard(
                 item = item,
                 onClick = { item.streamUrl?.let { onPlay(it, item.title) } },
+                showTitle = true,
             )
         }
     }
@@ -388,11 +468,14 @@ private val GUIDE_ROW_HEIGHT = 76.dp
 @Composable
 private fun EpgGuide(
     channels: List<Channel>,
+    favorites: Set<String>,
     programmesFor: (Channel) -> List<Programme>,
     onPlay: (String, String) -> Unit,
+    onFocusChannel: (Channel) -> Unit,
+    onToggleFavorite: (Channel) -> Unit,
 ) {
     if (channels.isEmpty()) {
-        CenterMessage("No EPG data. Add an EPG (XMLTV) URL to your playlist in Settings → Live TV.")
+        CenterMessage("No channels in this category.")
         return
     }
     val now = System.currentTimeMillis()
@@ -435,7 +518,10 @@ private fun EpgGuide(
                     ChannelLabel(
                         number = channels.indexOf(channel) + 1,
                         channel = channel,
+                        favorite = channel.id in favorites,
                         onClick = { onPlay(channel.streamUrl, channel.name) },
+                        onLongClick = { onToggleFavorite(channel) },
+                        onFocused = { onFocusChannel(channel) },
                     )
                     Row(
                         modifier = Modifier.horizontalScroll(scroll).fillMaxHeight(),
@@ -476,9 +562,19 @@ private fun EpgGuide(
 }
 
 @Composable
-private fun ChannelLabel(number: Int, channel: Channel, onClick: () -> Unit) {
+private fun ChannelLabel(
+    number: Int,
+    channel: Channel,
+    favorite: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onFocused: () -> Unit,
+) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
+    if (focused) {
+        androidx.compose.runtime.LaunchedEffect(Unit) { onFocused() }
+    }
     Row(
         modifier = Modifier
             .width(CHANNEL_COL_WIDTH)
@@ -486,7 +582,12 @@ private fun ChannelLabel(number: Int, channel: Channel, onClick: () -> Unit) {
             .padding(end = 8.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(if (focused) MaterialTheme.colorScheme.primary else Color(0xFF14141C))
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .combinedClickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
             .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -512,7 +613,9 @@ private fun ChannelLabel(number: Int, channel: Channel, onClick: () -> Unit) {
             color = fg,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
         )
+        if (favorite) Text("★", color = Color(0xFFFFD54F), style = MaterialTheme.typography.labelLarge)
     }
 }
 

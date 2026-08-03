@@ -23,6 +23,7 @@ fun MediaRow(
     items: List<MediaItem>,
     onItemClick: (MediaItem) -> Unit,
     modifier: Modifier = Modifier,
+    onItemLongClick: ((MediaItem) -> Unit)? = null,
 ) {
     if (items.isEmpty()) return
     Column(modifier = modifier.fillMaxWidth()) {
@@ -37,7 +38,11 @@ fun MediaRow(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             items(items, key = { it.id }) { item ->
-                MediaCard(item = item, onClick = { onItemClick(item) })
+                MediaCard(
+                    item = item,
+                    onClick = { onItemClick(item) },
+                    onLongClick = onItemLongClick?.let { cb -> { cb(item) } },
+                )
             }
         }
     }

@@ -289,7 +289,10 @@ fun SettingsScreen(
                         maxLines = 1,
                     )
                 }
-                AppButton(onClick = { viewModel.removePlaylist(playlist.id) }) { Text("Remove") }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AppButton(onClick = { viewModel.editPlaylist(playlist) }) { Text("Edit") }
+                    AppButton(onClick = { viewModel.removePlaylist(playlist.id) }) { Text("Remove") }
+                }
             }
         }
 

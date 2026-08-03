@@ -49,6 +49,9 @@ class LibraryRepository @Inject constructor(
     /** Saved resume position (ms) for a movie/episode id, or 0 if none. */
     suspend fun resumePosition(id: String): Long = watchProgressDao.get(id)?.positionMs ?: 0L
 
+    /** Remove all Continue Watching progress for a title (movie or whole show). */
+    suspend fun removeProgressForMedia(mediaId: String) = watchProgressDao.removeByMedia(mediaId)
+
     suspend fun saveProgress(
         id: String,
         mediaId: String,

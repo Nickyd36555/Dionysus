@@ -28,7 +28,12 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class HomeRowUi(val id: String, val title: String, val items: List<MediaItem>)
+data class HomeRowUi(
+    val id: String,
+    val title: String,
+    val items: List<MediaItem>,
+    val isContinueWatching: Boolean = false,
+)
 
 data class HomeUiState(
     val featured: List<MediaItem> = emptyList(),
@@ -105,7 +110,8 @@ class HomeViewModel @Inject constructor(
                 HomeRowKind.DOWNLOADS -> snapshot.downloads.map { it.toMediaItem() }
                 else -> catalog(row.kind)
             }.distinctBy { it.id }
-            if (items.isEmpty()) null else HomeRowUi(row.id, row.title, items)
+            if (items.isEmpty()) null
+            else HomeRowUi(row.id, row.title, items, isContinueWatching = row.kind == HomeRowKind.CONTINUE_WATCHING)
         }
 
         val addonRows = addonFetched
@@ -157,6 +163,11 @@ class HomeViewModel @Inject constructor(
                 emptyList()
             }
         }
+    }
+
+    /** Remove a title from Continue Watching (from the long-press menu). */
+    fun removeFromContinueWatching(mediaId: String) {
+        viewModelScope.launch { library.removeProgressForMedia(mediaId) }
     }
 
     private fun WatchProgressEntity.toMediaItem() = MediaItem(

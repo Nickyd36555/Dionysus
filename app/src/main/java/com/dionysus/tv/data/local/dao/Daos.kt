@@ -41,6 +41,9 @@ interface WatchProgressDao {
 
     @Query("DELETE FROM watch_progress WHERE id = :id")
     suspend fun remove(id: String)
+
+    @Query("DELETE FROM watch_progress WHERE mediaId = :mediaId")
+    suspend fun removeByMedia(mediaId: String)
 }
 
 @Dao

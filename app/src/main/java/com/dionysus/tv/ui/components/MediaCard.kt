@@ -1,15 +1,22 @@
-@file:OptIn(androidx.tv.material3.ExperimentalTvMaterial3Api::class)
+@file:OptIn(
+    androidx.tv.material3.ExperimentalTvMaterial3Api::class,
+    androidx.compose.foundation.ExperimentalFoundationApi::class,
+)
 
 package com.dionysus.tv.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,18 +30,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.dionysus.tv.core.model.MediaItem
+import com.dionysus.tv.core.model.MediaSource
+import com.dionysus.tv.core.model.MediaType
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 
-private val CardWidth = 148.dp
-private val CardHeight = 222.dp
+// Smaller posters than before so more fit per row and search results read cleanly.
+private val CardWidth = 120.dp
+private val PosterHeight = 178.dp
 
 /** A poster card that responds to both taps and D-pad focus. */
 @Composable
@@ -44,84 +55,99 @@ fun MediaCard(
     modifier: Modifier = Modifier,
     showTypeBadge: Boolean = false,
     showSourceBadge: Boolean = false,
+    showTitle: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     val shape = RoundedCornerShape(10.dp)
-    Box(
+    Column(
         modifier = modifier
             .width(CardWidth)
-            .size(CardWidth, CardHeight)
             .scale(if (focused) 1.06f else 1f)
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .then(if (focused) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, shape) else Modifier)
-            .clickable(interactionSource = interaction, indication = null) { onClick() },
+            .combinedClickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick,
+                onLongClick = onLongClick,
+            ),
     ) {
-        if (item.posterUrl != null) {
-            AsyncImage(
-                model = item.posterUrl,
-                contentDescription = item.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-        } else {
-            PosterPlaceholder(item.title)
+        Box(
+            modifier = Modifier
+                .width(CardWidth)
+                .height(PosterHeight)
+                .clip(shape)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .then(if (focused) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, shape) else Modifier),
+        ) {
+            if (item.posterUrl != null) {
+                AsyncImage(
+                    model = item.posterUrl,
+                    contentDescription = item.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                PosterPlaceholder(item.title)
+            }
+            if (showTypeBadge) {
+                Text(
+                    text = if (item.type == MediaType.TV_SHOW) "TV" else "MOVIE",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.primary)
+                        .padding(horizontal = 7.dp, vertical = 2.dp),
+                )
+            }
+            if (showSourceBadge) {
+                Text(
+                    text = item.source.label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(6.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(sourceColor(item.source))
+                        .padding(horizontal = 7.dp, vertical = 2.dp),
+                )
+            }
         }
-        if (showTypeBadge) {
+        if (showTitle) {
             Text(
-                text = if (item.type == com.dionysus.tv.core.model.MediaType.TV_SHOW) "TV" else "MOVIE",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(6.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.primary)
-                    .padding(horizontal = 8.dp, vertical = 3.dp),
-            )
-        }
-        if (showSourceBadge) {
-            val src = item.source
-            Text(
-                text = src.label,
-                style = MaterialTheme.typography.labelMedium,
-                color = androidx.compose.ui.graphics.Color.White,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(6.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(sourceColor(src))
-                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                text = item.title,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Start,
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp, start = 2.dp, end = 2.dp),
             )
         }
     }
 }
-
-private fun sourceColor(source: com.dionysus.tv.core.model.MediaSource): androidx.compose.ui.graphics.Color =
-    when (source) {
-        com.dionysus.tv.core.model.MediaSource.LIVE_TV -> androidx.compose.ui.graphics.Color(0xE6D32F2F)
-        com.dionysus.tv.core.model.MediaSource.VOD -> androidx.compose.ui.graphics.Color(0xE67B1FA2)
-        com.dionysus.tv.core.model.MediaSource.DIONYSUS -> androidx.compose.ui.graphics.Color(0xE60277BD)
-    }
 
 @Composable
 private fun PosterPlaceholder(title: String) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(12.dp),
+            .padding(10.dp),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = Icons.Default.Movie,
             contentDescription = null,
-            modifier = Modifier.size(40.dp),
+            modifier = Modifier.size(36.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
             text = title,
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
             maxLines = 3,
@@ -131,4 +157,10 @@ private fun PosterPlaceholder(title: String) {
                 .align(Alignment.BottomCenter),
         )
     }
+}
+
+private fun sourceColor(source: MediaSource): Color = when (source) {
+    MediaSource.LIVE_TV -> Color(0xE6D32F2F)
+    MediaSource.VOD -> Color(0xE67B1FA2)
+    MediaSource.DIONYSUS -> Color(0xE60277BD)
 }

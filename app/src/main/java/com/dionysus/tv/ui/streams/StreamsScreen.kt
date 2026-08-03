@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -168,14 +169,20 @@ private fun LoadingWithArt(state: StreamsUiState, message: String) {
                 AsyncImage(
                     model = poster,
                     contentDescription = state.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.height(200.dp).clip(RoundedCornerShape(12.dp)),
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.width(140.dp).height(210.dp).clip(RoundedCornerShape(12.dp)),
                 )
             }
+            // Show the title prominently so it's clear what's being scraped.
+            Text(
+                text = state.title,
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
             Text(
                 text = message,
                 style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

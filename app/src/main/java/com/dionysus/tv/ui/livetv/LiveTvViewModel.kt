@@ -27,7 +27,7 @@ const val CATEGORY_ALL_VOD = "All Movies"
 /** selectedCategory prefix meaning "every channel in this parent group". */
 const val GROUP_ALL_PREFIX = "grp:"
 
-enum class LiveTvMode { CHANNELS, VOD, GUIDE }
+enum class LiveTvMode { LIVE, VOD }
 
 /** A rail row: either a parent group (drillable) or a leaf category, with a count. */
 data class CategoryRow(
@@ -42,7 +42,7 @@ data class LiveTvUiState(
     val hasPlaylists: Boolean = true,
     val hasVod: Boolean = false,
     val isLoading: Boolean = true,
-    val mode: LiveTvMode = LiveTvMode.CHANNELS,
+    val mode: LiveTvMode = LiveTvMode.LIVE,
     val selectedCategory: String = CATEGORY_ALL,
     val selectedGroup: String? = null,
     val selectedVodCategory: String = CATEGORY_ALL_VOD,
@@ -101,14 +101,15 @@ data class LiveTvUiState(
             }
         }
 
-    /** VOD categories (from the provider), with an "All" entry first. */
+    /** VOD parent groups (US, UK, 24/7, …), with an "All" entry first. */
     val vodCategories: List<String>
-        get() = listOf(CATEGORY_ALL_VOD) + vod.flatMap { it.genres }.distinct().sorted()
+        get() = listOf(CATEGORY_ALL_VOD) +
+            vod.flatMap { it.genres }.map { CategoryGrouping.group(it) }.distinct().sorted()
 
-    /** VOD movies shown for the current VOD category. */
+    /** VOD movies shown for the current VOD group. */
     val visibleVod: List<MediaItem>
         get() = if (selectedVodCategory == CATEGORY_ALL_VOD) vod
-        else vod.filter { selectedVodCategory in it.genres }
+        else vod.filter { item -> item.genres.any { CategoryGrouping.group(it) == selectedVodCategory } }
 
     /** Channels that have EPG data, used to populate the guide. */
     val guideChannels: List<Channel>
