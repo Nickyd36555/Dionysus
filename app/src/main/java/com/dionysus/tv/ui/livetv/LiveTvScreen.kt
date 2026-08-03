@@ -34,6 +34,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -56,6 +58,7 @@ import com.dionysus.tv.data.iptv.Channel
 import com.dionysus.tv.data.iptv.Programme
 import com.dionysus.tv.ui.components.AppListItem
 import com.dionysus.tv.ui.components.MediaCard
+import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import java.text.SimpleDateFormat
@@ -84,7 +87,9 @@ fun LiveTvScreen(
             )
             if (state.epgLoading) {
                 EpgUpdatingPill()
+                Spacer(Modifier.width(12.dp))
             }
+            ReloadButton(onClick = { viewModel.refresh() })
         }
 
         when {
@@ -97,6 +102,28 @@ fun LiveTvScreen(
                 onPlay = onPlay,
             )
         }
+    }
+}
+
+/** Reload button — refetches channels + guide and re-applies timezone settings. */
+@Composable
+private fun ReloadButton(onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val shape = RoundedCornerShape(20.dp)
+    val bg = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+    val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    Row(
+        modifier = Modifier
+            .clip(shape)
+            .background(bg)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(Icons.Default.Refresh, contentDescription = "Reload", tint = fg, modifier = Modifier.size(20.dp))
+        Text("Reload", style = MaterialTheme.typography.titleMedium, color = fg)
     }
 }
 
