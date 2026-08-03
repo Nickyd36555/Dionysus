@@ -503,6 +503,23 @@ class IptvRepository @Inject constructor(
     /** Normalize an EPG channel id for matching across endpoints (case/whitespace). */
     fun normEpgId(id: String): String = id.trim().lowercase()
 
+    /**
+     * Difference between the Xtream provider's clock and this device's clock, in
+     * ms (serverNow − deviceNow). Adding it to the device time yields the correct
+     * "now" even when the device clock/timezone is wrong. Null if unavailable.
+     */
+    suspend fun serverTimeOffsetMs(): Long? {
+        val pl = runCatching { playlists.first() }.getOrDefault(emptyList())
+            .firstOrNull { it.kind == PlaylistKind.XTREAM } ?: return null
+        val url = "${pl.host}/player_api.php?username=${pl.username}&password=${pl.password}"
+        return runCatching {
+            val root = json.parseToJsonElement(fetchText(url)) as? JsonObject ?: return null
+            val server = root["server_info"] as? JsonObject ?: return null
+            val ts = server.str("timestamp_now").toLongOrNull() ?: return null
+            ts * 1000 - System.currentTimeMillis()
+        }.getOrNull()
+    }
+
     private fun normalizeHost(host: String): String {
         var h = host.trim().trimEnd('/')
         if (!h.startsWith("http")) h = "http://$h"

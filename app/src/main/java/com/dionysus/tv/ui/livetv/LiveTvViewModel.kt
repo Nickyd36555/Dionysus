@@ -62,8 +62,15 @@ data class LiveTvUiState(
     val epgLoading: Boolean = false,
     val epgOffsetMinutes: Int = 0,
     val guideTimeZone: String = "",
+    val autoGuideTime: Boolean = true,
+    val serverOffsetMs: Long? = null,
     val error: String? = null,
 ) {
+    /** Effective "now" correction: provider clock when auto, else manual offset. */
+    val effectiveOffsetMs: Long
+        get() = if (autoGuideTime && serverOffsetMs != null) serverOffsetMs
+        else epgOffsetMinutes * 60_000L
+
     private fun visibleGroupChannels() =
         channels.filter { CategoryGrouping.group(it.group) !in hiddenGroups }
 
@@ -143,7 +150,7 @@ class LiveTvViewModel @Inject constructor(
         liveSession.lastFocusedId = channel.id
         liveSession.epg = state.value.epg
         liveSession.shortEpg = state.value.shortEpg.toMutableMap()
-        liveSession.nowOffsetMs = state.value.epgOffsetMinutes * 60_000L
+        liveSession.nowOffsetMs = state.value.effectiveOffsetMs
     }
 
     private val _state = MutableStateFlow(LiveTvUiState())
@@ -161,6 +168,9 @@ class LiveTvViewModel @Inject constructor(
             .launchIn(viewModelScope)
         settings.guideTimeZone
             .onEach { tz -> _state.value = _state.value.copy(guideTimeZone = tz) }
+            .launchIn(viewModelScope)
+        settings.autoGuideTime
+            .onEach { auto -> _state.value = _state.value.copy(autoGuideTime = auto) }
             .launchIn(viewModelScope)
         refresh()
     }
@@ -186,6 +196,10 @@ class LiveTvViewModel @Inject constructor(
             }
             val instantEpg = iptv.cachedEpgOrDisk()
             if (instantEpg.isNotEmpty()) _state.value = _state.value.copy(epg = instantEpg)
+
+            // Auto-correct "now" from the provider clock (fixes wrong device clocks).
+            val serverOffset = runCatching { iptv.serverTimeOffsetMs() }.getOrNull()
+            if (serverOffset != null) _state.value = _state.value.copy(serverOffsetMs = serverOffset)
 
             // 2) Refresh channels/VOD in the background (indicator shown), then EPG.
             _state.value = _state.value.copy(epgLoading = true)
@@ -256,8 +270,8 @@ class LiveTvViewModel @Inject constructor(
         return fromXmltv.ifEmpty { _state.value.shortEpg[channel.id].orEmpty() }
     }
 
-    /** The guide's notion of "now": the device clock plus the user's correction. */
-    fun nowMs(): Long = System.currentTimeMillis() + _state.value.epgOffsetMinutes * 60_000L
+    /** The guide's notion of "now": device clock + provider (or manual) correction. */
+    fun nowMs(): Long = System.currentTimeMillis() + _state.value.effectiveOffsetMs
 
     /** Upcoming programmes for a channel (now onward), for the guide rows. */
     fun upcoming(channel: Channel, limit: Int = 12): List<Programme> {

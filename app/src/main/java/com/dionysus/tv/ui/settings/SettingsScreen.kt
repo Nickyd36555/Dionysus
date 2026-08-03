@@ -344,22 +344,34 @@ fun SettingsScreen(
                     viewModel.setGuideTimeZone(next.first)
                 }) { Text("Timezone: $currentTzLabel") }
 
-                Text(
-                    "Clock correction: ${formatOffset(state.epgOffsetMinutes)}",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(top = 12.dp),
+                ToggleRow(
+                    label = "Auto guide time (use provider clock)",
+                    enabled = state.autoGuideTime,
+                    onToggle = viewModel::setAutoGuideTime,
                 )
                 Text(
-                    "If the red NOW line sits on the wrong show (this device's clock is off), shift the current-time marker here until NOW lands on what's actually airing. E.g. if the guide thinks it's 6 AM but it's really 2 PM, add +8h.",
+                    "On: the guide's NOW is taken from your provider's server clock, so it's correct even if this device's clock/timezone is wrong. Turn off to set the correction manually below.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AppButton(onClick = { viewModel.adjustEpgOffset(-60) }) { Text("−1h") }
-                    AppButton(onClick = { viewModel.adjustEpgOffset(-30) }) { Text("−30m") }
-                    AppButton(onClick = { viewModel.adjustEpgOffset(30) }) { Text("+30m") }
-                    AppButton(onClick = { viewModel.adjustEpgOffset(60) }) { Text("+1h") }
+                if (!state.autoGuideTime) {
+                    Text(
+                        "Clock correction: ${formatOffset(state.epgOffsetMinutes)}",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    Text(
+                        "If NOW sits on the wrong show, shift the current-time marker until it lands on what's actually airing (e.g. +8h if the guide thinks it's 6 AM but it's really 2 PM).",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        AppButton(onClick = { viewModel.adjustEpgOffset(-60) }) { Text("−1h") }
+                        AppButton(onClick = { viewModel.adjustEpgOffset(-30) }) { Text("−30m") }
+                        AppButton(onClick = { viewModel.adjustEpgOffset(30) }) { Text("+30m") }
+                        AppButton(onClick = { viewModel.adjustEpgOffset(60) }) { Text("+1h") }
+                    }
                 }
             }
         }

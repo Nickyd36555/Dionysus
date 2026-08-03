@@ -51,6 +51,7 @@ data class SettingsUiState(
     val downloadFolder: String? = null,
     val epgOffsetMinutes: Int = 0,
     val guideTimeZone: String = "",
+    val autoGuideTime: Boolean = true,
     val addons: List<Addon> = emptyList(),
     val addonUrlInput: String = "",
     val syncCode: String? = null,
@@ -256,6 +257,7 @@ class SettingsViewModel @Inject constructor(
             downloadFolder = settings.currentDownloadFolderUri(),
             epgOffsetMinutes = settings.currentEpgOffsetMinutes(),
             guideTimeZone = settings.currentGuideTimeZone(),
+            autoGuideTime = settings.currentAutoGuideTime(),
             premiumizeKey = settings.currentPremiumizeApiKey().orEmpty(),
             orionKey = settings.currentOrionApiKey().orEmpty(),
             torrentioUrl = settings.torrentioBaseUrl.first(),
@@ -350,6 +352,11 @@ class SettingsViewModel @Inject constructor(
     fun setGuideTimeZone(id: String) {
         _state.value = _state.value.copy(guideTimeZone = id)
         viewModelScope.launch { settings.setGuideTimeZone(id) }
+    }
+
+    fun setAutoGuideTime(enabled: Boolean) {
+        _state.value = _state.value.copy(autoGuideTime = enabled)
+        viewModelScope.launch { settings.setAutoGuideTime(enabled) }
     }
 
     fun adjustEpgOffset(deltaMinutes: Int) {

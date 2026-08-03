@@ -42,6 +42,7 @@ class SettingsRepository @Inject constructor(
         val DOWNLOAD_FOLDER_URI = stringPreferencesKey("download_folder_uri")
         val EPG_OFFSET_MINUTES = intPreferencesKey("epg_offset_minutes")
         val GUIDE_TIMEZONE = stringPreferencesKey("guide_timezone")
+        val AUTO_GUIDE_TIME = booleanPreferencesKey("auto_guide_time")
         val ENABLED_SCRAPERS = stringSetPreferencesKey("enabled_scrapers")
         val ONLY_CACHED = booleanPreferencesKey("only_cached")
     }
@@ -76,6 +77,9 @@ class SettingsRepository @Inject constructor(
 
     /** Timezone the guide displays times in ("" = device default). */
     val guideTimeZone: Flow<String> = context.dataStore.data.map { it[Keys.GUIDE_TIMEZONE] ?: "" }
+
+    /** When true, derive the guide's "now" from the provider's clock automatically. */
+    val autoGuideTime: Flow<Boolean> = context.dataStore.data.map { it[Keys.AUTO_GUIDE_TIME] ?: true }
 
     /** When true, only sources already cached on a debrid service are shown. */
     val onlyCached: Flow<Boolean> =
@@ -127,6 +131,10 @@ class SettingsRepository @Inject constructor(
     suspend fun currentEpgOffsetMinutes(): Int = epgOffsetMinutes.first()
     suspend fun setGuideTimeZone(id: String) = put(Keys.GUIDE_TIMEZONE, id)
     suspend fun currentGuideTimeZone(): String = guideTimeZone.first()
+    suspend fun setAutoGuideTime(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.AUTO_GUIDE_TIME] = enabled }
+    }
+    suspend fun currentAutoGuideTime(): Boolean = autoGuideTime.first()
 
     suspend fun setOnlyCached(enabled: Boolean) {
         context.dataStore.edit { it[Keys.ONLY_CACHED] = enabled }
