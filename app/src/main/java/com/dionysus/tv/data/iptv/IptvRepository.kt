@@ -408,16 +408,22 @@ class IptvRepository @Inject constructor(
     }
 
     private suspend fun fetchEpg(url: String): Map<String, List<Programme>> = withContext(Dispatchers.IO) {
+        // NOTE: do NOT set Accept-Encoding manually — that turns off OkHttp's
+        // transparent gzip and hands us raw compressed bytes. Instead we sniff the
+        // gzip magic bytes ourselves so both .gz files and gzipped xmltv.php work.
         val request = Request.Builder().url(url)
-            .header("Accept-Encoding", "gzip")
             .header("User-Agent", IPTV_USER_AGENT)
             .build()
         epgClient.newCall(request).execute().use { resp ->
             if (!resp.isSuccessful) return@use emptyMap<String, List<Programme>>()
-            val bytes = resp.body ?: return@use emptyMap<String, List<Programme>>()
-            val stream = bytes.byteStream()
-            // Handle .gz URLs (OkHttp already transparently gunzips Content-Encoding).
-            val decoded = if (url.endsWith(".gz", ignoreCase = true)) GZIPInputStream(stream) else stream
+            val body = resp.body ?: return@use emptyMap<String, List<Programme>>()
+            val buffered = java.io.BufferedInputStream(body.byteStream())
+            buffered.mark(2)
+            val b0 = buffered.read()
+            val b1 = buffered.read()
+            buffered.reset()
+            val isGzip = b0 == 0x1f && b1 == 0x8b
+            val decoded = if (isGzip) GZIPInputStream(buffered) else buffered
             decoded.use { EpgParser.parse(it) }
         }
     }
