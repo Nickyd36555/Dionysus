@@ -3,6 +3,7 @@ package com.dionysus.tv.data.settings
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -39,6 +40,7 @@ class SettingsRepository @Inject constructor(
         val HOME_LAYOUT = stringPreferencesKey("home_layout_json")
         val FEATURED_SOURCE = stringPreferencesKey("featured_source")
         val DOWNLOAD_FOLDER_URI = stringPreferencesKey("download_folder_uri")
+        val EPG_OFFSET_MINUTES = intPreferencesKey("epg_offset_minutes")
         val ENABLED_SCRAPERS = stringSetPreferencesKey("enabled_scrapers")
         val ONLY_CACHED = booleanPreferencesKey("only_cached")
     }
@@ -67,6 +69,9 @@ class SettingsRepository @Inject constructor(
 
     /** SAF tree URI of the user's chosen download folder, or null for app storage. */
     val downloadFolderUri: Flow<String?> = get(Keys.DOWNLOAD_FOLDER_URI)
+
+    /** Manual EPG time shift (minutes) to correct a provider whose guide times are off. */
+    val epgOffsetMinutes: Flow<Int> = context.dataStore.data.map { it[Keys.EPG_OFFSET_MINUTES] ?: 0 }
 
     /** When true, only sources already cached on a debrid service are shown. */
     val onlyCached: Flow<Boolean> =
@@ -112,6 +117,10 @@ class SettingsRepository @Inject constructor(
     suspend fun currentFeaturedSource(): String = featuredSource.first()
     suspend fun setDownloadFolderUri(uri: String?) = put(Keys.DOWNLOAD_FOLDER_URI, uri)
     suspend fun currentDownloadFolderUri(): String? = downloadFolderUri.first()
+    suspend fun setEpgOffsetMinutes(minutes: Int) {
+        context.dataStore.edit { it[Keys.EPG_OFFSET_MINUTES] = minutes }
+    }
+    suspend fun currentEpgOffsetMinutes(): Int = epgOffsetMinutes.first()
 
     suspend fun setOnlyCached(enabled: Boolean) {
         context.dataStore.edit { it[Keys.ONLY_CACHED] = enabled }

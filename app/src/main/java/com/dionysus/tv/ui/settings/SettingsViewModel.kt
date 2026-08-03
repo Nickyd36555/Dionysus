@@ -49,6 +49,7 @@ data class SettingsUiState(
     val homeRows: List<HomeRow> = emptyList(),
     val featuredSource: String = "TRENDING",
     val downloadFolder: String? = null,
+    val epgOffsetMinutes: Int = 0,
     val addons: List<Addon> = emptyList(),
     val addonUrlInput: String = "",
     val syncCode: String? = null,
@@ -252,6 +253,7 @@ class SettingsViewModel @Inject constructor(
             omdbKey = settings.currentOmdbApiKey(),
             featuredSource = settings.currentFeaturedSource(),
             downloadFolder = settings.currentDownloadFolderUri(),
+            epgOffsetMinutes = settings.currentEpgOffsetMinutes(),
             premiumizeKey = settings.currentPremiumizeApiKey().orEmpty(),
             orionKey = settings.currentOrionApiKey().orEmpty(),
             torrentioUrl = settings.torrentioBaseUrl.first(),
@@ -341,6 +343,12 @@ class SettingsViewModel @Inject constructor(
     fun setFeaturedSource(kind: String) {
         _state.value = _state.value.copy(featuredSource = kind)
         viewModelScope.launch { settings.setFeaturedSource(kind) }
+    }
+
+    fun adjustEpgOffset(deltaMinutes: Int) {
+        val next = (_state.value.epgOffsetMinutes + deltaMinutes).coerceIn(-14 * 60, 14 * 60)
+        _state.value = _state.value.copy(epgOffsetMinutes = next)
+        viewModelScope.launch { settings.setEpgOffsetMinutes(next) }
     }
 
     fun setDownloadFolder(uri: String?) {

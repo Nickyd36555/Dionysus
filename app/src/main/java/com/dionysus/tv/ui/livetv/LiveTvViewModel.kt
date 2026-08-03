@@ -9,6 +9,7 @@ import com.dionysus.tv.data.iptv.Channel
 import com.dionysus.tv.data.iptv.IptvRepository
 import com.dionysus.tv.data.iptv.NowNext
 import com.dionysus.tv.data.iptv.Programme
+import com.dionysus.tv.data.settings.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -58,6 +59,7 @@ data class LiveTvUiState(
     /** Per-channel EPG (keyed by channel id) fetched on demand via get_short_epg. */
     val shortEpg: Map<String, List<Programme>> = emptyMap(),
     val epgLoading: Boolean = false,
+    val epgOffsetMinutes: Int = 0,
     val error: String? = null,
 ) {
     private fun visibleGroupChannels() =
@@ -125,6 +127,7 @@ data class LiveTvUiState(
 @HiltViewModel
 class LiveTvViewModel @Inject constructor(
     private val iptv: IptvRepository,
+    private val settings: SettingsRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(LiveTvUiState())
@@ -136,6 +139,9 @@ class LiveTvViewModel @Inject constructor(
             .launchIn(viewModelScope)
         iptv.hiddenGroups
             .onEach { hidden -> _state.value = _state.value.copy(hiddenGroups = hidden) }
+            .launchIn(viewModelScope)
+        settings.epgOffsetMinutes
+            .onEach { off -> _state.value = _state.value.copy(epgOffsetMinutes = off) }
             .launchIn(viewModelScope)
         refresh()
     }
@@ -216,8 +222,10 @@ class LiveTvViewModel @Inject constructor(
     /** All EPG programmes for a channel (sorted): XMLTV if present, else per-channel. */
     fun programmes(channel: Channel): List<Programme> {
         val fromXmltv = channel.epgId?.let { _state.value.epg[iptv.normEpgId(it)] }.orEmpty()
-        if (fromXmltv.isNotEmpty()) return fromXmltv
-        return _state.value.shortEpg[channel.id].orEmpty()
+        val base = fromXmltv.ifEmpty { _state.value.shortEpg[channel.id].orEmpty() }
+        val offset = _state.value.epgOffsetMinutes * 60_000L
+        return if (offset == 0L) base
+        else base.map { it.copy(startMs = it.startMs + offset, stopMs = it.stopMs + offset) }
     }
 
     /** Upcoming programmes for a channel (now onward), for the guide rows. */

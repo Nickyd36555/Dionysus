@@ -321,6 +321,29 @@ fun SettingsScreen(
                 }
             }
         }
+        item {
+            Column(
+                modifier = Modifier.fillMaxWidth(0.85f).padding(top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    "Guide time offset: ${formatOffset(state.epgOffsetMinutes)}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    "If the guide times are shifted from your local time, nudge them here (e.g. −3h for EST→PST). Times otherwise follow your device's timezone.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AppButton(onClick = { viewModel.adjustEpgOffset(-60) }) { Text("−1h") }
+                    AppButton(onClick = { viewModel.adjustEpgOffset(-30) }) { Text("−30m") }
+                    AppButton(onClick = { viewModel.adjustEpgOffset(30) }) { Text("+30m") }
+                    AppButton(onClick = { viewModel.adjustEpgOffset(60) }) { Text("+1h") }
+                }
+            }
+        }
 
         // ---- Downloads -----------------------------------------------------
         item { SectionHeader("Downloads") }
@@ -445,6 +468,20 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+}
+
+/** Human-readable guide time offset, e.g. "0", "+1h 30m", "−3h". */
+private fun formatOffset(minutes: Int): String {
+    if (minutes == 0) return "0 (device time)"
+    val sign = if (minutes < 0) "−" else "+"
+    val abs = kotlin.math.abs(minutes)
+    val h = abs / 60
+    val m = abs % 60
+    return buildString {
+        append(sign)
+        if (h > 0) append("${h}h")
+        if (m > 0) append(if (h > 0) " ${m}m" else "${m}m")
     }
 }
 
