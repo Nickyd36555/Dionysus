@@ -80,31 +80,12 @@ fun LiveTvScreen(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
             )
-            if (state.hasPlaylists) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TogglePill("Live TV", state.mode == LiveTvMode.LIVE) { viewModel.setMode(LiveTvMode.LIVE) }
-                    if (state.hasVod) {
-                        TogglePill("Movies (VOD)", state.mode == LiveTvMode.VOD) { viewModel.setMode(LiveTvMode.VOD) }
-                    }
-                }
-            }
         }
 
         when {
             !state.hasPlaylists && !state.isLoading -> EmptyState()
-            state.isLoading && state.channels.isEmpty() && state.vod.isEmpty() ->
+            state.isLoading && state.channels.isEmpty() ->
                 CenterMessage("Loading channels…")
-            state.mode == LiveTvMode.VOD -> Row(Modifier.fillMaxSize().padding(top = 12.dp)) {
-                SimpleCategoryRail(
-                    categories = state.vodCategories,
-                    selected = state.selectedVodCategory,
-                    onSelect = viewModel::selectVodCategory,
-                    modifier = Modifier.width(240.dp).fillMaxHeight(),
-                )
-                Box(Modifier.fillMaxSize().padding(start = 16.dp)) {
-                    VodGrid(vod = state.visibleVod, onPlay = onPlay)
-                }
-            }
             else -> LiveView(
                 state = state,
                 viewModel = viewModel,
@@ -250,7 +231,7 @@ private fun Modifier.androidx_clickable(interaction: MutableInteractionSource, o
 
 /** Plain string-category rail (used by VOD). */
 @Composable
-private fun SimpleCategoryRail(
+internal fun SimpleCategoryRail(
     categories: List<String>,
     selected: String,
     onSelect: (String) -> Unit,
@@ -437,7 +418,7 @@ private fun ChannelGrid(
 }
 
 @Composable
-private fun VodGrid(vod: List<com.dionysus.tv.core.model.MediaItem>, onPlay: (String, String) -> Unit) {
+internal fun VodGrid(vod: List<com.dionysus.tv.core.model.MediaItem>, onPlay: (String, String) -> Unit) {
     if (vod.isEmpty()) {
         CenterMessage("No VOD movies available.")
         return

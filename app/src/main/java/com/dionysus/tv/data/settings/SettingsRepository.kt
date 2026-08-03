@@ -38,6 +38,7 @@ class SettingsRepository @Inject constructor(
         val PREFERRED_PLAYER = stringPreferencesKey("preferred_player")
         val HOME_LAYOUT = stringPreferencesKey("home_layout_json")
         val FEATURED_SOURCE = stringPreferencesKey("featured_source")
+        val DOWNLOAD_FOLDER_URI = stringPreferencesKey("download_folder_uri")
         val ENABLED_SCRAPERS = stringSetPreferencesKey("enabled_scrapers")
         val ONLY_CACHED = booleanPreferencesKey("only_cached")
     }
@@ -63,6 +64,9 @@ class SettingsRepository @Inject constructor(
 
     /** Which row kind feeds the big top carousel (default TRENDING). */
     val featuredSource: Flow<String> = get(Keys.FEATURED_SOURCE).map { it ?: DEFAULT_FEATURED }
+
+    /** SAF tree URI of the user's chosen download folder, or null for app storage. */
+    val downloadFolderUri: Flow<String?> = get(Keys.DOWNLOAD_FOLDER_URI)
 
     /** When true, only sources already cached on a debrid service are shown. */
     val onlyCached: Flow<Boolean> =
@@ -106,6 +110,8 @@ class SettingsRepository @Inject constructor(
     suspend fun setHomeLayoutJson(json: String) = put(Keys.HOME_LAYOUT, json)
     suspend fun setFeaturedSource(kind: String) = put(Keys.FEATURED_SOURCE, kind)
     suspend fun currentFeaturedSource(): String = featuredSource.first()
+    suspend fun setDownloadFolderUri(uri: String?) = put(Keys.DOWNLOAD_FOLDER_URI, uri)
+    suspend fun currentDownloadFolderUri(): String? = downloadFolderUri.first()
 
     suspend fun setOnlyCached(enabled: Boolean) {
         context.dataStore.edit { it[Keys.ONLY_CACHED] = enabled }

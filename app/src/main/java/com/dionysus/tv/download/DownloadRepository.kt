@@ -93,7 +93,17 @@ class DownloadRepository @Inject constructor(
 
     suspend fun delete(download: DownloadEntity) {
         cancel(download)
-        download.localPath?.let { runCatching { java.io.File(it).delete() } }
+        download.localPath?.let { path ->
+            runCatching {
+                if (path.startsWith("content://")) {
+                    // SAF-stored file (user-chosen folder).
+                    androidx.documentfile.provider.DocumentFile
+                        .fromSingleUri(context, android.net.Uri.parse(path))?.delete()
+                } else {
+                    java.io.File(path).delete()
+                }
+            }
+        }
         downloadDao.delete(download)
     }
 

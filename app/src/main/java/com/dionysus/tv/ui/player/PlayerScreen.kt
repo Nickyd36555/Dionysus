@@ -143,7 +143,16 @@ fun PlayerScreen(
     fun closePanel() { panel = Panel.NONE; bump() }
 
     DisposableEffect(Unit) {
-        val media = Media(libVlc, Uri.parse(viewModel.url)).apply { setHWDecoderEnabled(true, false) }
+        val uri = Uri.parse(viewModel.url)
+        // SAF-downloaded files are content:// — LibVLC needs a file descriptor for those.
+        val pfd = if (uri.scheme == "content") {
+            runCatching { context.contentResolver.openFileDescriptor(uri, "r") }.getOrNull()
+        } else null
+        val media = if (pfd != null) {
+            Media(libVlc, pfd.fileDescriptor)
+        } else {
+            Media(libVlc, uri)
+        }.apply { setHWDecoderEnabled(true, false) }
         player.media = media
         media.release()
         player.play()
@@ -153,6 +162,7 @@ fun PlayerScreen(
             player.detachViews()
             player.release()
             libVlc.release()
+            runCatching { pfd?.close() }
         }
     }
 

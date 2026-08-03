@@ -14,7 +14,8 @@ import java.util.TimeZone
  */
 object EpgParser {
 
-    private const val MAX_PROGRAMMES = 60_000
+    private const val MAX_PROGRAMMES = 150_000
+    private const val MAX_DESC = 220
 
     fun parse(input: InputStream): Map<String, List<Programme>> {
         val byChannel = HashMap<String, MutableList<Programme>>()
@@ -38,7 +39,7 @@ object EpgParser {
                         if (inner == XmlPullParser.START_TAG) {
                             when (parser.name) {
                                 "title" -> title = parser.nextText().trim()
-                                "desc" -> desc = parser.nextText().trim()
+                                "desc" -> desc = parser.nextText().trim().take(MAX_DESC)
                             }
                         }
                         if (inner == XmlPullParser.END_DOCUMENT) break

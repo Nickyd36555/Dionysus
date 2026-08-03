@@ -19,6 +19,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -26,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.window.Dialog
@@ -39,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dionysus.tv.BuildConfig
+import android.net.Uri
 import com.dionysus.tv.player.ExternalPlayer
 import com.dionysus.tv.ui.components.AppButton
 import com.dionysus.tv.ui.components.AppListItem
@@ -53,6 +58,20 @@ fun SettingsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val updateState by updateViewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val folderPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }
+            viewModel.setDownloadFolder(uri.toString())
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -298,6 +317,33 @@ fun SettingsScreen(
             }
         }
 
+        // ---- Downloads -----------------------------------------------------
+        item { SectionHeader("Downloads") }
+        item {
+            Column(
+                modifier = Modifier.fillMaxWidth(0.85f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                val current = state.downloadFolder
+                Text(
+                    text = "Saves to: " + (current?.let { folderDisplayName(it) } ?: "App storage (default)"),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    "Pick any folder — internal, USB, SD, or a network drive. Pause/resume keeps working.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    AppButton(onClick = { folderPicker.launch(null) }) { Text("Choose folder") }
+                    if (current != null) {
+                        AppButton(onClick = { viewModel.setDownloadFolder(null) }) { Text("Use app storage") }
+                    }
+                }
+            }
+        }
+
         // ---- Players -------------------------------------------------------
         item { SectionHeader("Preferred Player") }
         items(state.availablePlayers, key = { it.id }) { player ->
@@ -396,6 +442,13 @@ fun SettingsScreen(
         }
     }
 }
+
+/** Turn a SAF tree URI into a readable folder name for display. */
+private fun folderDisplayName(uriString: String): String = runCatching {
+    val decoded = Uri.decode(uriString)
+    decoded.substringAfterLast(':').ifBlank { decoded.substringAfterLast('/') }
+        .ifBlank { "Selected folder" }
+}.getOrDefault("Selected folder")
 
 @Composable
 private fun SectionHeader(title: String) {

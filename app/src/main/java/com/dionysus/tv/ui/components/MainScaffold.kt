@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
@@ -115,6 +116,7 @@ private fun NavRailIcon(
 private fun iconFor(dest: TopLevelDestination): ImageVector = when (dest) {
     TopLevelDestination.HOME -> Icons.Default.Home
     TopLevelDestination.LIVE_TV -> Icons.Default.LiveTv
+    TopLevelDestination.MOVIES -> Icons.Default.Movie
     TopLevelDestination.SEARCH -> Icons.Default.Search
     TopLevelDestination.DOWNLOADS -> Icons.Default.Download
     TopLevelDestination.SETTINGS -> Icons.Default.Settings

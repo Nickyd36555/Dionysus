@@ -4,8 +4,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.documentfile.provider.DocumentFile
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
@@ -13,6 +15,7 @@ import androidx.work.WorkerParameters
 import com.dionysus.tv.R
 import com.dionysus.tv.data.local.DownloadStatus
 import com.dionysus.tv.data.local.dao.DownloadDao
+import com.dionysus.tv.data.settings.SettingsRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
@@ -20,6 +23,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
+import java.io.OutputStream
 
 /**
  * Streams a resolved direct URL to app-scoped external storage, reporting byte
@@ -32,6 +36,7 @@ class DownloadWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val downloadDao: DownloadDao,
     private val okHttpClient: OkHttpClient,
+    private val settings: SettingsRepository,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -44,20 +49,21 @@ class DownloadWorker @AssistedInject constructor(
         }
 
         setForeground(foregroundInfo(entity.title))
-        val target = destinationFile(entity.title, downloadId)
+        // Target is either the user's chosen SAF folder (USB/SD/network) or app storage.
+        val target = resolveTarget(entity.title, downloadId)
 
         try {
             downloadDao.updateStatus(downloadId, DownloadStatus.DOWNLOADING.name, null)
 
             // Resume support: if a partial file exists, ask for the remaining bytes.
-            val existing = if (target.exists()) target.length() else 0L
+            val existing = target.existingBytes()
             val builder = Request.Builder().url(url)
             if (existing > 0) builder.header("Range", "bytes=$existing-")
 
             okHttpClient.newCall(builder.build()).execute().use { response ->
                 // 416 = we already have the whole file.
                 if (response.code == 416) {
-                    downloadDao.updateStatus(downloadId, DownloadStatus.COMPLETED.name, target.absolutePath)
+                    downloadDao.updateStatus(downloadId, DownloadStatus.COMPLETED.name, target.pathString)
                     return@withContext Result.success()
                 }
                 if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
@@ -70,7 +76,7 @@ class DownloadWorker @AssistedInject constructor(
                     .takeIf { it > 0 } ?: entity.totalBytes
 
                 body.byteStream().use { input ->
-                    java.io.FileOutputStream(target, append).use { output ->
+                    target.openOutput(append).use { output ->
                         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                         var read: Int
                         var lastReported = downloaded
@@ -93,7 +99,7 @@ class DownloadWorker @AssistedInject constructor(
                 }
                 downloadDao.updateProgress(downloadId, DownloadStatus.DOWNLOADING.name, downloaded, total)
             }
-            downloadDao.updateStatus(downloadId, DownloadStatus.COMPLETED.name, target.absolutePath)
+            downloadDao.updateStatus(downloadId, DownloadStatus.COMPLETED.name, target.pathString)
             Result.success()
         } catch (t: Throwable) {
             // Preserve the partial file for resume; only mark failed.
@@ -102,10 +108,50 @@ class DownloadWorker @AssistedInject constructor(
         }
     }
 
-    private fun destinationFile(title: String, id: String): File {
-        val dir = File(applicationContext.getExternalFilesDir(null), "downloads").apply { mkdirs() }
+    /** Where the bytes land: a resumable OutputStream + how many bytes exist so far. */
+    private interface Target {
+        fun existingBytes(): Long
+        fun openOutput(append: Boolean): OutputStream
+        val pathString: String
+    }
+
+    private suspend fun resolveTarget(title: String, id: String): Target {
         val safeName = title.replace(Regex("[^A-Za-z0-9._-]"), "_").take(60)
-        return File(dir, "${safeName}_$id.mp4")
+        val fileName = "${safeName}_$id.mp4"
+        val folderUri = runCatching { settings.currentDownloadFolderUri() }.getOrNull()
+        if (!folderUri.isNullOrBlank()) {
+            val doc = runCatching {
+                val tree = DocumentFile.fromTreeUri(applicationContext, Uri.parse(folderUri))
+                if (tree != null && tree.canWrite()) {
+                    tree.findFile(fileName) ?: tree.createFile("video/mp4", fileName)
+                } else null
+            }.getOrNull()
+            if (doc != null) return SafTarget(doc.uri)
+            // Fall back to app storage if the chosen folder is unavailable.
+        }
+        val dir = File(applicationContext.getExternalFilesDir(null), "downloads").apply { mkdirs() }
+        return FileTarget(File(dir, fileName))
+    }
+
+    private inner class FileTarget(private val file: File) : Target {
+        init { file.parentFile?.mkdirs() }
+        override fun existingBytes(): Long = if (file.exists()) file.length() else 0L
+        override fun openOutput(append: Boolean): OutputStream = java.io.FileOutputStream(file, append)
+        override val pathString: String get() = file.absolutePath
+    }
+
+    private inner class SafTarget(private val uri: Uri) : Target {
+        override fun existingBytes(): Long = runCatching {
+            applicationContext.contentResolver.openFileDescriptor(uri, "r")?.use {
+                it.statSize.coerceAtLeast(0L)
+            } ?: 0L
+        }.getOrDefault(0L)
+
+        override fun openOutput(append: Boolean): OutputStream =
+            applicationContext.contentResolver.openOutputStream(uri, if (append) "wa" else "w")
+                ?: throw IllegalStateException("Cannot open output for $uri")
+
+        override val pathString: String get() = uri.toString()
     }
 
     private fun foregroundInfo(title: String): ForegroundInfo {

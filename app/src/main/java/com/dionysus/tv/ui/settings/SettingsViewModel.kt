@@ -48,6 +48,7 @@ data class SettingsUiState(
     val scrapers: List<ScraperInfo> = emptyList(),
     val homeRows: List<HomeRow> = emptyList(),
     val featuredSource: String = "TRENDING",
+    val downloadFolder: String? = null,
     val addons: List<Addon> = emptyList(),
     val addonUrlInput: String = "",
     val syncCode: String? = null,
@@ -247,6 +248,7 @@ class SettingsViewModel @Inject constructor(
             tmdbKey = settings.currentTmdbApiKey().orEmpty(),
             omdbKey = settings.currentOmdbApiKey(),
             featuredSource = settings.currentFeaturedSource(),
+            downloadFolder = settings.currentDownloadFolderUri(),
             premiumizeKey = settings.currentPremiumizeApiKey().orEmpty(),
             orionKey = settings.currentOrionApiKey().orEmpty(),
             torrentioUrl = settings.torrentioBaseUrl.first(),
@@ -336,6 +338,16 @@ class SettingsViewModel @Inject constructor(
     fun setFeaturedSource(kind: String) {
         _state.value = _state.value.copy(featuredSource = kind)
         viewModelScope.launch { settings.setFeaturedSource(kind) }
+    }
+
+    fun setDownloadFolder(uri: String?) {
+        _state.value = _state.value.copy(downloadFolder = uri)
+        viewModelScope.launch {
+            settings.setDownloadFolderUri(uri)
+            _state.value = _state.value.copy(
+                statusMessage = if (uri == null) "Downloads will save to app storage." else "Download folder set.",
+            )
+        }
     }
 
     fun connectRealDebrid() {

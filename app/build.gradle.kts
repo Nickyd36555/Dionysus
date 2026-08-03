@@ -31,8 +31,8 @@ android {
         targetSdk = 34
         // CI overrides these from the pushed tag so the APK's version matches
         // the GitHub Release the in-app updater compares against.
-        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 307
-        versionName = System.getenv("VERSION_NAME") ?: "0.3.7"
+        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 308
+        versionName = System.getenv("VERSION_NAME") ?: "0.3.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -155,6 +155,9 @@ dependencies {
 
     // Background downloads
     implementation(libs.androidx.work.runtime.ktx)
+
+    // Storage Access Framework helper for user-chosen download folders (USB/SD/etc.)
+    implementation("androidx.documentfile:documentfile:1.0.1")
 
     // Runtime permissions
     implementation(libs.accompanist.permissions)

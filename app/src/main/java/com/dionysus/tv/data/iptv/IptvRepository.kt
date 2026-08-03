@@ -30,6 +30,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPInputStream
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -170,7 +171,7 @@ class IptvRepository @Inject constructor(
         // VOD movies whose title matches.
         cachedVod.filter { it.title.lowercase().contains(q) }.take(30).forEach { results.add(it) }
         // Things airing on Live TV: match EPG programme titles, resolve the channel.
-        val channelsByEpg = cachedChannels.filter { it.epgId != null }.associateBy { it.epgId }
+        val channelsByEpg = cachedChannels.filter { it.epgId != null }.associateBy { normEpgId(it.epgId!!) }
         val now = System.currentTimeMillis()
         cachedEpg.forEach { (epgId, programmes) ->
             val channel = channelsByEpg[epgId] ?: return@forEach
@@ -287,6 +288,17 @@ class IptvRepository @Inject constructor(
         }
     }
 
+    // XMLTV files (esp. full Xtream guides for 1000s of channels) are big and slow;
+    // the shared 60s call timeout would kill them mid-download. This client removes
+    // the overall call timeout and allows a long read.
+    private val epgClient: OkHttpClient by lazy {
+        client.newBuilder()
+            .callTimeout(0, TimeUnit.MILLISECONDS)
+            .readTimeout(4, TimeUnit.MINUTES)
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
+
     /** Fetch and merge EPG for every playlist that declares an XMLTV URL. */
     suspend fun loadEpg(): Map<String, List<Programme>> = coroutineScope {
         val defs = runCatching { playlists.first() }.getOrDefault(emptyList())
@@ -294,16 +306,19 @@ class IptvRepository @Inject constructor(
             async { runCatching { fetchEpg(pl.epgUrl) }.getOrDefault(emptyMap()) }
         }.awaitAll()
         val merged = HashMap<String, List<Programme>>()
-        maps.forEach { m -> m.forEach { (k, v) -> merged[k] = (merged[k].orEmpty() + v) } }
+        // Normalize channel ids so Xtream epg_channel_id matches XMLTV channel ids
+        // regardless of case/whitespace differences between the two endpoints.
+        maps.forEach { m -> m.forEach { (k, v) -> val key = normEpgId(k); merged[key] = (merged[key].orEmpty() + v) } }
         merged
     }
 
     private suspend fun fetchEpg(url: String): Map<String, List<Programme>> = withContext(Dispatchers.IO) {
-        val request = Request.Builder().url(url).build()
-        client.newCall(request).execute().use { resp ->
+        val request = Request.Builder().url(url).header("Accept-Encoding", "gzip").build()
+        epgClient.newCall(request).execute().use { resp ->
             if (!resp.isSuccessful) return@use emptyMap<String, List<Programme>>()
             val bytes = resp.body ?: return@use emptyMap<String, List<Programme>>()
             val stream = bytes.byteStream()
+            // Handle .gz URLs (OkHttp already transparently gunzips Content-Encoding).
             val decoded = if (url.endsWith(".gz", ignoreCase = true)) GZIPInputStream(stream) else stream
             decoded.use { EpgParser.parse(it) }
         }
@@ -333,6 +348,9 @@ class IptvRepository @Inject constructor(
         if (raw.isNullOrBlank()) return emptyList()
         return runCatching { json.decodeFromString(listSerializer, raw) }.getOrDefault(emptyList())
     }
+
+    /** Normalize an EPG channel id for matching across endpoints (case/whitespace). */
+    fun normEpgId(id: String): String = id.trim().lowercase()
 
     private fun normalizeHost(host: String): String {
         var h = host.trim().trimEnd('/')

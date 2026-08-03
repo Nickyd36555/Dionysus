@@ -7,6 +7,7 @@ object Routes {
     const val SPLASH = "splash"
     const val HOME = "home"
     const val LIVE_TV = "livetv"
+    const val MOVIES = "movies"
     const val SEARCH = "search"
     const val DOWNLOADS = "downloads"
     const val SETTINGS = "settings"
@@ -37,6 +38,7 @@ object Routes {
 enum class TopLevelDestination(val route: String, val label: String) {
     HOME(Routes.HOME, "Home"),
     LIVE_TV(Routes.LIVE_TV, "Live TV"),
+    MOVIES(Routes.MOVIES, "Movies"),
     SEARCH(Routes.SEARCH, "Search"),
     DOWNLOADS(Routes.DOWNLOADS, "Downloads"),
     SETTINGS(Routes.SETTINGS, "Settings"),

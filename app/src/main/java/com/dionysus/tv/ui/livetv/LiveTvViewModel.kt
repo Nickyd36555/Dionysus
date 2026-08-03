@@ -210,7 +210,7 @@ class LiveTvViewModel @Inject constructor(
     /** Upcoming programmes for a channel (now onward), for the guide rows. */
     fun upcoming(channel: Channel, limit: Int = 12): List<Programme> {
         val epgId = channel.epgId ?: return emptyList()
-        val list = _state.value.epg[epgId] ?: return emptyList()
+        val list = _state.value.epg[iptv.normEpgId(epgId)] ?: return emptyList()
         val now = System.currentTimeMillis()
         return list.filter { it.stopMs > now }.take(limit)
     }
@@ -218,7 +218,7 @@ class LiveTvViewModel @Inject constructor(
     /** All EPG programmes for a channel (sorted), for the timeline guide. */
     fun programmes(channel: Channel): List<Programme> {
         val epgId = channel.epgId ?: return emptyList()
-        return _state.value.epg[epgId].orEmpty()
+        return _state.value.epg[iptv.normEpgId(epgId)].orEmpty()
     }
 
     private fun loadEpg() {
@@ -239,7 +239,7 @@ class LiveTvViewModel @Inject constructor(
     /** Now/next for a channel, computed against the current wall-clock. */
     fun nowNext(channel: Channel): NowNext {
         val epgId = channel.epgId ?: return NowNext()
-        val list = _state.value.epg[epgId] ?: return NowNext()
+        val list = _state.value.epg[iptv.normEpgId(epgId)] ?: return NowNext()
         val now = System.currentTimeMillis()
         val current = list.firstOrNull { now in it.startMs until it.stopMs }
         val next = list.firstOrNull { it.startMs >= now }
