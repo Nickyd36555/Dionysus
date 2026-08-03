@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,6 +27,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dionysus.tv.core.model.MediaItem
+import com.dionysus.tv.core.model.MediaType
 import com.dionysus.tv.ui.components.MediaCard
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -54,17 +58,38 @@ fun SearchScreen(
                 )
             }
         } else {
+            val movies = results.filter { it.type == MediaType.MOVIE }
+            val shows = results.filter { it.type == MediaType.TV_SHOW }
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(160.dp),
                 contentPadding = PaddingValues(top = 24.dp, bottom = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
-                items(results, key = { it.id }) { item ->
-                    MediaCard(item = item, onClick = { onOpenDetail(item.id) }, showTypeBadge = true)
-                }
+                section("Movies", movies, onOpenDetail)
+                section("TV Shows", shows, onOpenDetail)
             }
         }
+    }
+}
+
+/** A full-width header followed by that type's cards, within one grid. */
+private fun LazyGridScope.section(
+    title: String,
+    items: List<MediaItem>,
+    onOpenDetail: (String) -> Unit,
+) {
+    if (items.isEmpty()) return
+    item(span = { GridItemSpan(maxLineSpan) }) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+        )
+    }
+    items(items, key = { it.id }) { item ->
+        MediaCard(item = item, onClick = { onOpenDetail(item.id) })
     }
 }
 

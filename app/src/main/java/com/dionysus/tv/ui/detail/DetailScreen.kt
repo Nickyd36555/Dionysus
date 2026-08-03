@@ -117,9 +117,10 @@ fun DetailScreen(
                         modifier = Modifier.padding(top = 20.dp),
                     ) {
                         if (item.type == MediaType.MOVIE) {
+                            val resuming = state.resumePositionMs > 0
                             AppButton(onClick = { onFindSources(item.id, null, null) }) {
                                 Icon(Icons.Default.PlayArrow, contentDescription = null)
-                                Text("  Find Sources")
+                                Text(if (resuming) "  Resume ${formatResume(state.resumePositionMs)}" else "  Find Sources")
                             }
                         }
                         AppButton(onClick = viewModel::toggleFavorite) {
@@ -162,6 +163,13 @@ fun DetailScreen(
             }
         }
     }
+}
+
+private fun formatResume(ms: Long): String {
+    val totalMin = ms / 60000
+    val h = totalMin / 60
+    val m = totalMin % 60
+    return if (h > 0) "${h}h ${m}m" else "${m}m"
 }
 
 @Composable

@@ -28,6 +28,7 @@ data class DetailUiState(
     val selectedSeason: Int? = null,
     val episodes: List<Episode> = emptyList(),
     val isFavorite: Boolean = false,
+    val resumePositionMs: Long = 0L,
     val isLoading: Boolean = true,
     val error: String? = null,
 )
@@ -53,6 +54,10 @@ class DetailViewModel @Inject constructor(
         library.isFavorite(mediaId)
             .onEach { fav -> _state.value = _state.value.copy(isFavorite = fav) }
             .launchIn(viewModelScope)
+        viewModelScope.launch {
+            // Movies save progress under their mediaId; a value here means "in progress".
+            _state.value = _state.value.copy(resumePositionMs = library.resumePosition(mediaId))
+        }
     }
 
     private fun load() {
