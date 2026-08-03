@@ -99,7 +99,18 @@ fun LiveTvPlayerScreen(
     var showInfo by remember { mutableStateOf(true) }
     var showList by remember { mutableStateOf(false) }
     var infoTick by remember { mutableIntStateOf(0) }
+    var numberEntry by remember { mutableStateOf("") }
     val current = channels[index]
+
+    // Number quick-zap: after a brief pause, jump to the typed channel number.
+    LaunchedEffect(numberEntry) {
+        if (numberEntry.isEmpty()) return@LaunchedEffect
+        delay(1500)
+        numberEntry.toIntOrNull()?.let { n ->
+            if (n >= 1) index = (n - 1).coerceIn(0, channels.size - 1)
+        }
+        numberEntry = ""
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -148,15 +159,19 @@ fun LiveTvPlayerScreen(
             .focusable()
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown || showList) return@onKeyEvent false
-                when (event.key) {
-                    Key.DirectionUp, Key.ChannelUp -> {
+                val digit = digitFor(event.key)
+                when {
+                    digit != null -> { numberEntry = (numberEntry + digit).take(4); true }
+                    event.key == Key.DirectionUp || event.key == Key.ChannelUp -> {
                         index = (index - 1 + channels.size) % channels.size; true
                     }
-                    Key.DirectionDown, Key.ChannelDown -> {
+                    event.key == Key.DirectionDown || event.key == Key.ChannelDown -> {
                         index = (index + 1) % channels.size; true
                     }
-                    Key.DirectionCenter, Key.Enter -> { showList = true; true }
-                    Key.DirectionLeft, Key.DirectionRight -> { showInfo = true; infoTick++; true }
+                    event.key == Key.DirectionCenter || event.key == Key.Enter -> { showList = true; true }
+                    event.key == Key.DirectionLeft || event.key == Key.DirectionRight -> {
+                        showInfo = true; infoTick++; true
+                    }
                     else -> false
                 }
             },
@@ -192,7 +207,42 @@ fun LiveTvPlayerScreen(
                 onSelect = { index = it; showList = false },
             )
         }
+
+        if (numberEntry.isNotEmpty() && !showList) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(40.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xE6000000))
+                    .padding(horizontal = 28.dp, vertical = 16.dp),
+            ) {
+                Text(
+                    numberEntry,
+                    style = MaterialTheme.typography.displaySmall,
+                    color = Color.White,
+                )
+            }
+        }
     }
+}
+
+/**
+ * Maps a hardware/remote key to its digit character, covering both the number
+ * row and the numeric keypad. Returns null for non-digit keys.
+ */
+private fun digitFor(key: Key): Char? = when (key) {
+    Key.Zero, Key.NumPad0 -> '0'
+    Key.One, Key.NumPad1 -> '1'
+    Key.Two, Key.NumPad2 -> '2'
+    Key.Three, Key.NumPad3 -> '3'
+    Key.Four, Key.NumPad4 -> '4'
+    Key.Five, Key.NumPad5 -> '5'
+    Key.Six, Key.NumPad6 -> '6'
+    Key.Seven, Key.NumPad7 -> '7'
+    Key.Eight, Key.NumPad8 -> '8'
+    Key.Nine, Key.NumPad9 -> '9'
+    else -> null
 }
 
 @Composable

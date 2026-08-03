@@ -5,6 +5,7 @@
 
 package com.dionysus.tv.ui.livetv
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -34,6 +35,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
@@ -51,6 +53,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -181,17 +188,38 @@ private fun LiveView(
         else java.util.TimeZone.getTimeZone(state.guideTimeZone)
     }
 
+    // Once a category (e.g. Movies) is picked, collapse the rail so the guide
+    // spans the full width — like TiViMate. Reopen with Back or by pressing Left
+    // on the leftmost channel.
+    var showCategories by remember { mutableStateOf(true) }
+    val railFocus = remember { FocusRequester() }
+    val guideFocus = remember { FocusRequester() }
+
+    BackHandler(enabled = !showCategories) { showCategories = true }
+
+    LaunchedEffect(showCategories) {
+        runCatching { if (showCategories) railFocus.requestFocus() else guideFocus.requestFocus() }
+    }
+
     Row(Modifier.fillMaxSize().padding(top = 12.dp)) {
-        CategoryRail(
-            state = state,
-            onRow = viewModel::onRowSelected,
-            onSub = viewModel::selectSub,
-            onBack = viewModel::backToGroups,
-            onHideGroup = viewModel::hideGroup,
-            onToggleHidden = viewModel::toggleShowHidden,
-            modifier = Modifier.width(260.dp).fillMaxHeight(),
-        )
-        Column(Modifier.fillMaxSize().padding(start = 16.dp)) {
+        if (showCategories) {
+            CategoryRail(
+                state = state,
+                onRow = { row ->
+                    viewModel.onRowSelected(row)
+                    if (!row.isGroup) showCategories = false
+                },
+                onSub = { row ->
+                    viewModel.selectSub(row)
+                    showCategories = false
+                },
+                onBack = viewModel::backToGroups,
+                onHideGroup = viewModel::hideGroup,
+                onToggleHidden = viewModel::toggleShowHidden,
+                modifier = Modifier.width(260.dp).fillMaxHeight().focusRequester(railFocus),
+            )
+        }
+        Column(Modifier.fillMaxSize().padding(start = if (showCategories) 16.dp else 0.dp)) {
             if (preview != null) {
                 NowNextPreview(channel = preview, nowNext = viewModel.nowNext(preview), zone = zone)
             }
@@ -202,9 +230,11 @@ private fun LiveView(
                 zone = zone,
                 now = viewModel.nowMs(),
                 restoreFocusId = viewModel.lastFocusedChannelId,
+                firstChannelFocus = guideFocus,
                 onPlayChannel = onPlayChannel,
                 onFocusChannel = { previewChannel = it; viewModel.prefetchGuide(listOf(it)) },
                 onToggleFavorite = viewModel::toggleFavorite,
+                onExitLeft = if (!showCategories) ({ showCategories = true }) else null,
             )
         }
     }
@@ -530,9 +560,11 @@ private fun EpgGuide(
     zone: java.util.TimeZone,
     now: Long,
     restoreFocusId: String?,
+    firstChannelFocus: FocusRequester? = null,
     onPlayChannel: (Channel) -> Unit,
     onFocusChannel: (Channel) -> Unit,
     onToggleFavorite: (Channel) -> Unit,
+    onExitLeft: (() -> Unit)? = null,
 ) {
     if (channels.isEmpty()) {
         CenterMessage("No channels in this category.")
@@ -581,19 +613,25 @@ private fun EpgGuide(
         }
 
         LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(channels, key = { it.id }) { channel ->
+            itemsIndexed(channels, key = { _, ch -> ch.id }) { i, channel ->
                 Row(
                     modifier = Modifier.height(GUIDE_ROW_HEIGHT),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    val labelFocus = when {
+                        channel.id == restoreFocusId -> Modifier.focusRequester(restoreFocus)
+                        i == 0 && firstChannelFocus != null -> Modifier.focusRequester(firstChannelFocus)
+                        else -> Modifier
+                    }
                     ChannelLabel(
-                        number = channels.indexOf(channel) + 1,
+                        number = i + 1,
                         channel = channel,
                         favorite = channel.id in favorites,
-                        modifier = if (channel.id == restoreFocusId) Modifier.focusRequester(restoreFocus) else Modifier,
+                        modifier = labelFocus,
                         onClick = { onPlayChannel(channel) },
                         onLongClick = { onToggleFavorite(channel) },
                         onFocused = { onFocusChannel(channel) },
+                        onExitLeft = onExitLeft,
                     )
                     Row(
                         modifier = Modifier.horizontalScroll(scroll).fillMaxHeight(),
@@ -659,6 +697,7 @@ private fun ChannelLabel(
     onLongClick: () -> Unit,
     onFocused: () -> Unit,
     modifier: Modifier = Modifier,
+    onExitLeft: (() -> Unit)? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
@@ -670,6 +709,13 @@ private fun ChannelLabel(
             .width(CHANNEL_COL_WIDTH)
             .fillMaxHeight()
             .padding(end = 8.dp)
+            .then(
+                if (onExitLeft != null) Modifier.onKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionLeft) {
+                        onExitLeft(); true
+                    } else false
+                } else Modifier,
+            )
             .clip(RoundedCornerShape(8.dp))
             .background(if (focused) MaterialTheme.colorScheme.primary else Color(0xFF14141C))
             .combinedClickable(
