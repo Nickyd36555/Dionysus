@@ -50,3 +50,34 @@ data class NowNext(
     val now: Programme? = null,
     val next: Programme? = null,
 )
+
+/**
+ * IPTV providers name categories like "US | Entertainment", "UK | Sports", or
+ * "24/7 - Breaking Bad". These helpers bundle them into a top-level parent group
+ * (US, UK, SPORTS, 24/7, …) that the UI can drill into.
+ */
+object CategoryGrouping {
+    private val DELIMS = listOf("|", ":", "»", "•", " - ", " – ", " — ")
+    private val H24 = Regex("(?i)24\\s*[/-]?\\s*7")
+
+    /** The parent group for a raw category name (upper-cased for stable bundling). */
+    fun group(raw: String): String {
+        val c = raw.trim()
+        if (H24.containsMatchIn(c)) return "24/7"
+        for (d in DELIMS) {
+            val i = c.indexOf(d)
+            if (i > 0) return c.substring(0, i).trim().uppercase()
+        }
+        return c
+    }
+
+    /** The sub-category label within a group (the part after the delimiter). */
+    fun sub(raw: String): String {
+        val c = raw.trim()
+        for (d in DELIMS) {
+            val i = c.indexOf(d)
+            if (i >= 0) return c.substring(i + d.length).trim().ifEmpty { c }
+        }
+        return c
+    }
+}

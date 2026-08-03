@@ -9,6 +9,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -89,11 +92,11 @@ fun LiveTvScreen(
                 CenterMessage("Loading channels…")
             state.mode == LiveTvMode.GUIDE -> EpgGuide(
                 channels = state.guideChannels,
-                upcomingFor = viewModel::upcoming,
+                programmesFor = viewModel::programmes,
                 onPlay = onPlay,
             )
             state.mode == LiveTvMode.VOD -> Row(Modifier.fillMaxSize().padding(top = 12.dp)) {
-                CategoryRail(
+                SimpleCategoryRail(
                     categories = state.vodCategories,
                     selected = state.selectedVodCategory,
                     onSelect = viewModel::selectVodCategory,
@@ -105,10 +108,13 @@ fun LiveTvScreen(
             }
             else -> Row(Modifier.fillMaxSize().padding(top = 12.dp)) {
                 CategoryRail(
-                    categories = state.categories,
-                    selected = state.selectedCategory,
-                    onSelect = viewModel::selectCategory,
-                    modifier = Modifier.width(240.dp).fillMaxHeight(),
+                    state = state,
+                    onRow = viewModel::onRowSelected,
+                    onSub = viewModel::selectSub,
+                    onBack = viewModel::backToGroups,
+                    onHideGroup = viewModel::hideGroup,
+                    onToggleHidden = viewModel::toggleShowHidden,
+                    modifier = Modifier.width(260.dp).fillMaxHeight(),
                 )
                 Box(Modifier.fillMaxSize().padding(start = 16.dp)) {
                     ChannelGrid(
@@ -163,8 +169,9 @@ private fun TogglePill(label: String, selected: Boolean, onClick: () -> Unit) {
 private fun Modifier.androidx_clickable(interaction: MutableInteractionSource, onClick: () -> Unit): Modifier =
     this.clickable(interactionSource = interaction, indication = null, onClick = onClick)
 
+/** Plain string-category rail (used by VOD). */
 @Composable
-private fun CategoryRail(
+private fun SimpleCategoryRail(
     categories: List<String>,
     selected: String,
     onSelect: (String) -> Unit,
@@ -182,6 +189,138 @@ private fun CategoryRail(
                     Text(category, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 },
             )
+        }
+    }
+}
+
+/**
+ * Grouped, drill-down channel category rail. Top level shows Favorites, All, and
+ * parent groups (US, UK, Sports, 24/7, …) each with a count; groups with several
+ * sub-categories drill in. Hold OK on a group to hide it; a footer toggle reveals
+ * hidden groups so they can be restored.
+ */
+@Composable
+private fun CategoryRail(
+    state: LiveTvUiState,
+    onRow: (CategoryRow) -> Unit,
+    onSub: (CategoryRow) -> Unit,
+    onBack: () -> Unit,
+    onHideGroup: (String) -> Unit,
+    onToggleHidden: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val drilled = state.selectedGroup != null
+    LazyColumn(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        if (drilled) {
+            item(key = "back") {
+                CategoryRowItem(
+                    label = "‹  ${state.selectedGroup}",
+                    count = null,
+                    selected = false,
+                    isGroup = false,
+                    hidden = false,
+                    onClick = onBack,
+                    onLongClick = null,
+                )
+            }
+            items(state.subRows, key = { "sub:" + it.value }) { row ->
+                CategoryRowItem(
+                    label = row.label,
+                    count = row.count,
+                    selected = row.value == state.selectedCategory,
+                    isGroup = false,
+                    hidden = false,
+                    onClick = { onSub(row) },
+                    onLongClick = null,
+                )
+            }
+        } else {
+            items(state.topRows, key = { it.value }) { row ->
+                CategoryRowItem(
+                    label = row.label,
+                    count = row.count,
+                    selected = row.value == state.selectedCategory && !row.isGroup,
+                    isGroup = row.isGroup,
+                    hidden = row.hidden,
+                    onClick = { onRow(row) },
+                    onLongClick = if (row.isGroup) ({ onHideGroup(row.value) }) else null,
+                )
+            }
+            if (state.hiddenGroups.isNotEmpty()) {
+                item(key = "toggle-hidden") {
+                    CategoryRowItem(
+                        label = if (state.showHidden) "Hide hidden (${state.hiddenGroups.size})"
+                        else "Show hidden (${state.hiddenGroups.size})",
+                        count = null,
+                        selected = false,
+                        isGroup = false,
+                        hidden = false,
+                        onClick = onToggleHidden,
+                        onLongClick = null,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryRowItem(
+    label: String,
+    count: Int?,
+    selected: Boolean,
+    isGroup: Boolean,
+    hidden: Boolean,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)?,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val shape = RoundedCornerShape(8.dp)
+    val bg = when {
+        focused -> MaterialTheme.colorScheme.primary
+        selected -> MaterialTheme.colorScheme.surfaceVariant
+        else -> Color.Transparent
+    }
+    val fg = when {
+        focused -> MaterialTheme.colorScheme.onPrimary
+        hidden -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(bg)
+            .combinedClickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
+            .padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label + if (hidden) "  (hidden)" else "",
+            style = MaterialTheme.typography.titleMedium,
+            color = fg,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        if (count != null) {
+            Text(
+                text = count.toString(),
+                style = MaterialTheme.typography.labelMedium,
+                color = fg.copy(alpha = 0.8f),
+            )
+        }
+        if (isGroup) {
+            Text("  ›", style = MaterialTheme.typography.titleMedium, color = fg)
         }
     }
 }
@@ -240,53 +379,93 @@ private fun VodGrid(vod: List<com.dionysus.tv.core.model.MediaItem>, onPlay: (St
     }
 }
 
+// Timeline geometry.
+private const val PX_PER_MIN = 5           // dp of width per minute of programme time
+private const val SLOT_MIN = 30            // ruler tick every 30 minutes
+private val CHANNEL_COL_WIDTH = 220.dp
+private val GUIDE_ROW_HEIGHT = 76.dp
+
 @Composable
 private fun EpgGuide(
     channels: List<Channel>,
-    upcomingFor: (Channel) -> List<Programme>,
+    programmesFor: (Channel) -> List<Programme>,
     onPlay: (String, String) -> Unit,
 ) {
     if (channels.isEmpty()) {
         CenterMessage("No EPG data. Add an EPG (XMLTV) URL to your playlist in Settings → Live TV.")
         return
     }
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(top = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        items(channels, key = { it.id }) { channel ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Channel label (also plays the channel).
-                Box(
-                    modifier = Modifier.width(150.dp).padding(end = 12.dp),
-                ) {
+    val now = System.currentTimeMillis()
+    val slotMs = SLOT_MIN * 60_000L
+    // Start the timeline 30 min before the current half-hour so "now" is visible.
+    val timelineStart = (now / slotMs) * slotMs - slotMs
+    val maxStop = channels.maxOf { ch -> programmesFor(ch).maxOfOrNull { it.stopMs } ?: (now + 3 * 3_600_000L) }
+    val totalSlots = (((maxStop - timelineStart) / slotMs).toInt() + 1).coerceIn(6, 48)
+    val scroll = rememberScrollState()
+
+    Column(Modifier.fillMaxSize().padding(top = 12.dp)) {
+        // Time ruler (shares the horizontal scroll with every channel lane).
+        Row {
+            Box(Modifier.width(CHANNEL_COL_WIDTH)) {
+                Text(
+                    formatDay(now),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+            }
+            Row(Modifier.horizontalScroll(scroll)) {
+                repeat(totalSlots) { i ->
                     Text(
-                        text = channel.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
+                        text = formatClock(timelineStart + i * slotMs),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.width((SLOT_MIN * PX_PER_MIN).dp).padding(vertical = 8.dp),
                     )
                 }
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val programmes = upcomingFor(channel)
-                    if (programmes.isEmpty()) {
-                        item {
+            }
+        }
+
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(channels, key = { it.id }) { channel ->
+                Row(
+                    modifier = Modifier.height(GUIDE_ROW_HEIGHT),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ChannelLabel(
+                        number = channels.indexOf(channel) + 1,
+                        channel = channel,
+                        onClick = { onPlay(channel.streamUrl, channel.name) },
+                    )
+                    Row(
+                        modifier = Modifier.horizontalScroll(scroll).fillMaxHeight(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val programmes = programmesFor(channel)
+                            .filter { it.stopMs > timelineStart }
+                            .sortedBy { it.startMs }
+                        var cursor = timelineStart
+                        programmes.forEach { prog ->
+                            val start = maxOf(prog.startMs, timelineStart)
+                            val gapMin = ((start - cursor) / 60_000L).toInt()
+                            if (gapMin > 0) Spacer(Modifier.width((gapMin * PX_PER_MIN).dp))
+                            val widthMin = ((prog.stopMs - start) / 60_000L).toInt().coerceAtLeast(6)
                             ProgrammeBlock(
-                                time = "",
-                                title = "No guide data",
-                                isNow = false,
-                                onClick = { onPlay(channel.streamUrl, channel.name) },
-                            )
-                        }
-                    } else {
-                        val now = System.currentTimeMillis()
-                        items(programmes, key = { it.startMs }) { prog ->
-                            ProgrammeBlock(
-                                time = formatClock(prog.startMs),
+                                widthDp = (widthMin * PX_PER_MIN).dp,
+                                time = "${formatClock(prog.startMs)}–${formatClock(prog.stopMs)}",
                                 title = prog.title,
                                 isNow = now in prog.startMs until prog.stopMs,
                                 onClick = { onPlay(channel.streamUrl, "${channel.name} — ${prog.title}") },
+                            )
+                            cursor = prog.stopMs
+                        }
+                        if (programmes.isEmpty()) {
+                            ProgrammeBlock(
+                                widthDp = 300.dp,
+                                time = "",
+                                title = "No guide data — press to watch",
+                                isNow = false,
+                                onClick = { onPlay(channel.streamUrl, channel.name) },
                             )
                         }
                     }
@@ -297,10 +476,51 @@ private fun EpgGuide(
 }
 
 @Composable
-private fun ProgrammeBlock(time: String, title: String, isNow: Boolean, onClick: () -> Unit) {
+private fun ChannelLabel(number: Int, channel: Channel, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    val shape = RoundedCornerShape(8.dp)
+    Row(
+        modifier = Modifier
+            .width(CHANNEL_COL_WIDTH)
+            .fillMaxHeight()
+            .padding(end = 8.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (focused) MaterialTheme.colorScheme.primary else Color(0xFF14141C))
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+        Text(number.toString(), style = MaterialTheme.typography.labelLarge, color = fg.copy(alpha = 0.7f))
+        Box(
+            modifier = Modifier.size(44.dp, 40.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFF0B0B10)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (channel.logo != null) {
+                AsyncImage(
+                    model = channel.logo,
+                    contentDescription = channel.name,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize().padding(3.dp),
+                )
+            }
+        }
+        Text(
+            channel.name,
+            style = MaterialTheme.typography.titleSmall,
+            color = fg,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun ProgrammeBlock(widthDp: androidx.compose.ui.unit.Dp, time: String, title: String, isNow: Boolean, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val shape = RoundedCornerShape(6.dp)
     val bg = when {
         focused -> MaterialTheme.colorScheme.primary
         isNow -> MaterialTheme.colorScheme.surfaceVariant
@@ -309,29 +529,35 @@ private fun ProgrammeBlock(time: String, title: String, isNow: Boolean, onClick:
     val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     Column(
         modifier = Modifier
-            .width(200.dp)
+            .width(widthDp)
+            .fillMaxHeight()
+            .padding(end = 4.dp)
             .clip(shape)
             .background(bg)
             .then(if (isNow && !focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape) else Modifier)
-            .androidx_clickable(interaction, onClick)
-            .padding(12.dp),
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.Center,
     ) {
-        Row {
-            if (time.isNotBlank()) {
-                Text(time, style = MaterialTheme.typography.labelMedium, color = fg)
-                Text("  ", style = MaterialTheme.typography.labelMedium, color = fg)
-            }
-            if (isNow) {
-                Text("● NOW", style = MaterialTheme.typography.labelMedium, color = Color(0xFFFF5252))
-            }
-        }
         Text(
             text = title,
             style = MaterialTheme.typography.titleSmall,
             color = fg,
-            maxLines = 2,
+            maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+        Row {
+            if (isNow) Text("● ", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF5252))
+            if (time.isNotBlank()) {
+                Text(
+                    time,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = fg.copy(alpha = 0.8f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
 }
 
@@ -445,5 +671,7 @@ private fun CenterMessage(message: String) {
     }
 }
 
-private val clockFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+private val clockFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
+private val dayFormat = SimpleDateFormat("EEE, d MMM", Locale.getDefault())
 private fun formatClock(ms: Long): String = clockFormat.format(Date(ms))
+private fun formatDay(ms: Long): String = dayFormat.format(Date(ms))

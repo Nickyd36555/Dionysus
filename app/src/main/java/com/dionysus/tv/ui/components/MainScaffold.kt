@@ -4,6 +4,7 @@ package com.dionysus.tv.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,19 +50,24 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.dionysus.tv.R
 import com.dionysus.tv.ui.navigation.TopLevelDestination
+import kotlinx.coroutines.delay
 
 private val RAIL_COLLAPSED = 76.dp
 private val RAIL_EXPANDED = 232.dp
 
 /**
- * The persistent left navigation rail shared by all top-level screens. It stays
- * collapsed to icons-only until it (or one of its items) has focus, then expands
- * to reveal labels — keeping the maximum room for content while you browse.
+ * The persistent left navigation rail. It stays collapsed to icons and expands
+ * to labels when focused. The expanded rail is drawn as an OVERLAY on top of the
+ * content (the content keeps a fixed collapsed-width margin and never reflows),
+ * which is what stops the focus from oscillating and the rail from flickering
+ * open/closed when you click things in the content area. Collapse is debounced
+ * so brief focus hops (e.g. during navigation) don't snap it shut.
  */
 @Composable
 fun MainScaffold(
@@ -68,23 +75,43 @@ fun MainScaffold(
     onSelect: (TopLevelDestination) -> Unit,
     content: @Composable () -> Unit,
 ) {
-    var railFocused by remember { mutableStateOf(false) }
+    var rawFocus by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(false) }
+    LaunchedEffect(rawFocus) {
+        if (rawFocus) {
+            expanded = true
+        } else {
+            delay(160)
+            expanded = false
+        }
+    }
     val railWidth by animateDpAsState(
-        targetValue = if (railFocused) RAIL_EXPANDED else RAIL_COLLAPSED,
+        targetValue = if (expanded) RAIL_EXPANDED else RAIL_COLLAPSED,
+        animationSpec = tween(180),
         label = "railWidth",
     )
 
-    Row(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
     ) {
+        // Content reserves only the collapsed width, so expansion never reflows it.
+        Row(modifier = Modifier.fillMaxSize()) {
+            Spacer(Modifier.width(RAIL_COLLAPSED))
+            Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                content()
+            }
+        }
+
+        // The rail itself, overlaid on top of the reserved margin / content.
         Column(
             modifier = Modifier
                 .width(railWidth)
                 .fillMaxHeight()
+                .zIndex(1f)
                 .background(MaterialTheme.colorScheme.surface)
-                .onFocusChanged { railFocused = it.hasFocus }
+                .onFocusChanged { rawFocus = it.hasFocus }
                 .padding(horizontal = 12.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -94,17 +121,12 @@ fun MainScaffold(
                     icon = iconFor(dest),
                     label = dest.label,
                     selected = dest == selected,
-                    expanded = railFocused,
+                    expanded = expanded,
                     onClick = { onSelect(dest) },
                 )
             }
-            // Push the wordmark to the bottom of the rail (transparent, no box).
             Spacer(Modifier.weight(1f))
-            AnimatedVisibility(
-                visible = railFocused,
-                enter = fadeIn(),
-                exit = fadeOut(),
-            ) {
+            AnimatedVisibility(visible = expanded, enter = fadeIn(), exit = fadeOut()) {
                 Image(
                     painter = painterResource(R.drawable.logo_wordmark),
                     contentDescription = "Dionysus Streaming",
@@ -116,20 +138,9 @@ fun MainScaffold(
                 )
             }
         }
-
-        Box(modifier = Modifier
-            .weight(1f)
-            .fillMaxHeight()) {
-            content()
-        }
     }
 }
 
-/**
- * A single rail entry. Always shows its icon; the text label slides in only when
- * the rail is expanded. Focus draws a filled highlight so the remote's position
- * is always obvious.
- */
 @Composable
 private fun NavRailItem(
     icon: ImageVector,

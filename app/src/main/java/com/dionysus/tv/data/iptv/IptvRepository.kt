@@ -65,6 +65,23 @@ class IptvRepository @Inject constructor(
         prefs[KEY_FAVORITES] ?: emptySet()
     }
 
+    /** Category groups the user has chosen to hide from the Live TV rail. */
+    val hiddenGroups: Flow<Set<String>> = context.iptvStore.data.map { prefs ->
+        prefs[KEY_HIDDEN_GROUPS] ?: emptySet()
+    }
+
+    suspend fun toggleHiddenGroup(group: String) {
+        context.iptvStore.edit { prefs ->
+            val set = (prefs[KEY_HIDDEN_GROUPS] ?: emptySet()).toMutableSet()
+            if (!set.add(group)) set.remove(group)
+            prefs[KEY_HIDDEN_GROUPS] = set
+        }
+    }
+
+    suspend fun clearHiddenGroups() {
+        context.iptvStore.edit { it.remove(KEY_HIDDEN_GROUPS) }
+    }
+
     suspend fun addM3u(name: String, url: String, epgUrl: String): DataResult<Unit> = DataResult.catching {
         val cleanUrl = url.trim()
         require(cleanUrl.startsWith("http")) { "Enter a valid http(s) playlist URL." }
@@ -335,5 +352,6 @@ class IptvRepository @Inject constructor(
         private const val TAG = "IptvRepository"
         private val KEY_PLAYLISTS = stringPreferencesKey("iptv_playlists_json")
         private val KEY_FAVORITES = stringSetPreferencesKey("iptv_favorites")
+        private val KEY_HIDDEN_GROUPS = stringSetPreferencesKey("iptv_hidden_groups")
     }
 }
