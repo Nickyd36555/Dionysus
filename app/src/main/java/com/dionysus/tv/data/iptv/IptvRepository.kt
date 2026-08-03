@@ -26,6 +26,9 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 import java.util.zip.GZIPInputStream
 import javax.inject.Inject
@@ -45,6 +48,7 @@ class IptvRepository @Inject constructor(
     private val json: Json,
 ) {
     private val listSerializer = ListSerializer(StoredPlaylist.serializer())
+    private val clockFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
 
     // In-memory caches so unified search and the guide don't re-hit the network
     // on every keystroke. Invalidated whenever playlists change.
@@ -150,19 +154,26 @@ class IptvRepository @Inject constructor(
         cachedVod.filter { it.title.lowercase().contains(q) }.take(30).forEach { results.add(it) }
         // Things airing on Live TV: match EPG programme titles, resolve the channel.
         val channelsByEpg = cachedChannels.filter { it.epgId != null }.associateBy { it.epgId }
+        val now = System.currentTimeMillis()
         cachedEpg.forEach { (epgId, programmes) ->
             val channel = channelsByEpg[epgId] ?: return@forEach
-            programmes.filter { it.title.lowercase().contains(q) }
+            programmes.filter { it.title.lowercase().contains(q) && it.stopMs > now }
+                .sortedBy { it.startMs }
                 .distinctBy { it.title }
-                .take(2)
+                .take(3)
                 .forEach { prog ->
+                    val schedule = "${clockFormat.format(Date(prog.startMs))}–${clockFormat.format(Date(prog.stopMs))}"
+                    val airing = now in prog.startMs until prog.stopMs
+                    val subtitle = (if (airing) "● NOW  " else "") + "${channel.name}  ·  $schedule"
                     results.add(
                         MediaItem(
                             id = "livetv:${channel.id}:${prog.startMs}",
                             type = MediaType.MOVIE,
                             title = prog.title,
-                            overview = prog.description.ifBlank { "On ${channel.name}" },
+                            subtitle = subtitle,
+                            overview = prog.description,
                             posterUrl = channel.logo,
+                            genres = listOf(channel.name),
                             source = MediaSource.LIVE_TV,
                             streamUrl = channel.streamUrl,
                         ),

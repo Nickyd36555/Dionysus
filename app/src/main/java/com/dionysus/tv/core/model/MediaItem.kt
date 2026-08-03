@@ -23,6 +23,8 @@ data class MediaItem(
     val id: String,
     val type: MediaType,
     val title: String,
+    /** Secondary line (e.g. a Live TV result's channel + air time). */
+    val subtitle: String? = null,
     val overview: String = "",
     val posterUrl: String? = null,
     val backdropUrl: String? = null,
