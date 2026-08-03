@@ -16,7 +16,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -30,7 +32,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dionysus.tv.data.local.DownloadStatus
 import com.dionysus.tv.data.local.entity.DownloadEntity
 import com.dionysus.tv.ui.components.AppButton
-import com.dionysus.tv.ui.components.AppSurface
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -72,8 +73,9 @@ fun DownloadsScreen(
                         onPlay = {
                             download.localPath?.let { onPlay("file://$it", download.title) }
                         },
+                        onPause = { viewModel.pause(download) },
+                        onResume = { viewModel.resume(download) },
                         onDelete = { viewModel.delete(download) },
-                        onCancel = { viewModel.cancel(download) },
                     )
                 }
             }
@@ -85,59 +87,63 @@ fun DownloadsScreen(
 private fun DownloadRow(
     download: DownloadEntity,
     onPlay: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
     onDelete: () -> Unit,
-    onCancel: () -> Unit,
 ) {
     val status = runCatching { DownloadStatus.valueOf(download.status) }.getOrNull()
     val fraction = if (download.totalBytes > 0) {
         (download.bytesDownloaded.toFloat() / download.totalBytes).coerceIn(0f, 1f)
     } else 0f
 
-    AppSurface(
-        onClick = { if (status == DownloadStatus.COMPLETED) onPlay() },
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
-                Text(
-                    text = download.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = "${download.quality}  •  ${statusLabel(status, fraction)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (status == DownloadStatus.DOWNLOADING) {
-                    ProgressBar(fraction, Modifier.padding(top = 8.dp))
-                }
-            }
-            when (status) {
-                DownloadStatus.COMPLETED -> {
-                    AppButton(onClick = onPlay, modifier = Modifier.padding(end = 8.dp)) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "Play")
-                    }
-                    AppButton(onClick = onDelete) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete")
-                    }
-                }
-                DownloadStatus.DOWNLOADING, DownloadStatus.QUEUED, DownloadStatus.RESOLVING ->
-                    AppButton(onClick = onCancel) { Text("Cancel") }
-                else ->
-                    AppButton(onClick = onDelete) {
-                        Icon(Icons.Default.Delete, contentDescription = "Remove")
-                    }
+        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+            Text(
+                text = download.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "${download.quality}  •  ${statusLabel(status, fraction)}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (status == DownloadStatus.DOWNLOADING || status == DownloadStatus.PAUSED) {
+                ProgressBar(fraction, Modifier.padding(top = 8.dp))
             }
         }
+        when (status) {
+            DownloadStatus.COMPLETED -> {
+                DownloadAction(Icons.Default.PlayArrow, "Play", onPlay)
+                DownloadAction(Icons.Default.Delete, "Delete", onDelete)
+            }
+            DownloadStatus.DOWNLOADING, DownloadStatus.QUEUED, DownloadStatus.RESOLVING -> {
+                DownloadAction(Icons.Default.Pause, "Pause", onPause)
+                DownloadAction(Icons.Default.Close, "Cancel", onDelete)
+            }
+            DownloadStatus.PAUSED, DownloadStatus.FAILED -> {
+                DownloadAction(Icons.Default.PlayArrow, "Resume", onResume)
+                DownloadAction(Icons.Default.Close, "Cancel", onDelete)
+            }
+            else -> DownloadAction(Icons.Default.Delete, "Remove", onDelete)
+        }
+    }
+}
+
+@Composable
+private fun DownloadAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    AppButton(onClick = onClick, modifier = Modifier.padding(start = 8.dp)) {
+        Icon(icon, contentDescription = null)
+        Text("  $label")
     }
 }
 

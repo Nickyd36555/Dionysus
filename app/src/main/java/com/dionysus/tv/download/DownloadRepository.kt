@@ -79,6 +79,18 @@ class DownloadRepository @Inject constructor(
         download.workId?.let { WorkManager.getInstance(context).cancelWorkById(UUID.fromString(it)) }
     }
 
+    /** Stop the worker but keep the partial file so it can resume later. */
+    suspend fun pause(download: DownloadEntity) {
+        download.workId?.let { WorkManager.getInstance(context).cancelWorkById(UUID.fromString(it)) }
+        downloadDao.updateStatus(download.id, DownloadStatus.PAUSED.name, download.localPath)
+    }
+
+    /** Re-enqueue a paused/failed download; the worker resumes via HTTP range. */
+    suspend fun resume(download: DownloadEntity) {
+        downloadDao.updateStatus(download.id, DownloadStatus.QUEUED.name, download.localPath)
+        enqueueWorker(download.id)
+    }
+
     suspend fun delete(download: DownloadEntity) {
         cancel(download)
         download.localPath?.let { runCatching { java.io.File(it).delete() } }

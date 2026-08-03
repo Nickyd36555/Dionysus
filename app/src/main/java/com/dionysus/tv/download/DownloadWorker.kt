@@ -48,20 +48,35 @@ class DownloadWorker @AssistedInject constructor(
 
         try {
             downloadDao.updateStatus(downloadId, DownloadStatus.DOWNLOADING.name, null)
-            val request = Request.Builder().url(url).build()
-            okHttpClient.newCall(request).execute().use { response ->
+
+            // Resume support: if a partial file exists, ask for the remaining bytes.
+            val existing = if (target.exists()) target.length() else 0L
+            val builder = Request.Builder().url(url)
+            if (existing > 0) builder.header("Range", "bytes=$existing-")
+
+            okHttpClient.newCall(builder.build()).execute().use { response ->
+                // 416 = we already have the whole file.
+                if (response.code == 416) {
+                    downloadDao.updateStatus(downloadId, DownloadStatus.COMPLETED.name, target.absolutePath)
+                    return@withContext Result.success()
+                }
                 if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
                 val body = response.body ?: throw IllegalStateException("Empty body")
-                val total = body.contentLength().takeIf { it > 0 } ?: entity.totalBytes
-                var downloaded = 0L
+
+                // 206 = server honored the range and we append; otherwise restart.
+                val append = existing > 0 && response.code == 206
+                var downloaded = if (append) existing else 0L
+                val total = if (append) existing + body.contentLength() else body.contentLength()
+                    .takeIf { it > 0 } ?: entity.totalBytes
+
                 body.byteStream().use { input ->
-                    target.outputStream().use { output ->
+                    java.io.FileOutputStream(target, append).use { output ->
                         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                         var read: Int
-                        var lastReported = 0L
+                        var lastReported = downloaded
                         while (input.read(buffer).also { read = it } != -1) {
                             if (isStopped) {
-                                target.delete()
+                                // Keep the partial file so Resume can continue it.
                                 downloadDao.updateStatus(downloadId, DownloadStatus.PAUSED.name, null)
                                 return@withContext Result.failure()
                             }
@@ -81,7 +96,7 @@ class DownloadWorker @AssistedInject constructor(
             downloadDao.updateStatus(downloadId, DownloadStatus.COMPLETED.name, target.absolutePath)
             Result.success()
         } catch (t: Throwable) {
-            target.delete()
+            // Preserve the partial file for resume; only mark failed.
             downloadDao.updateStatus(downloadId, DownloadStatus.FAILED.name, null)
             Result.failure()
         }

@@ -5,6 +5,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -88,6 +90,8 @@ fun PlayerScreen(
     var controlsVisible by remember { mutableStateOf(true) }
     var interaction by remember { mutableStateOf(0) }
     var seeked by remember { mutableStateOf(false) }
+    var showTracks by remember { mutableStateOf(false) }
+    val tracksFocus = remember { FocusRequester() }
 
     fun bump() { controlsVisible = true; interaction++ }
     fun togglePlay() { if (player.isPlaying) player.pause() else player.play() }
@@ -144,8 +148,13 @@ fun PlayerScreen(
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
     BackHandler {
-        viewModel.saveProgress(player.time, player.length)
-        onBack()
+        if (showTracks) {
+            showTracks = false
+            focusRequester.requestFocus()
+        } else {
+            viewModel.saveProgress(player.time, player.length)
+            onBack()
+        }
     }
 
     Box(
@@ -165,7 +174,8 @@ fun PlayerScreen(
                     }
                     Key.DirectionLeft, Key.MediaRewind -> { seekBy(-10_000); bump(); true }
                     Key.DirectionRight, Key.MediaFastForward -> { seekBy(10_000); bump(); true }
-                    Key.DirectionUp, Key.DirectionDown -> { bump(); true }
+                    Key.DirectionUp -> { showTracks = true; true }
+                    Key.DirectionDown -> { bump(); true }
                     else -> false
                 }
             },
@@ -183,16 +193,81 @@ fun PlayerScreen(
             },
         )
 
-        if (controlsVisible) {
+        if (controlsVisible && !showTracks) {
             PlayerControls(
                 title = viewModel.title,
                 isPlaying = isPlaying,
                 positionMs = positionMs,
                 lengthMs = lengthMs,
-                onPlayPause = { togglePlay(); bump() },
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
+
+        if (showTracks) {
+            LaunchedEffect(Unit) { runCatching { tracksFocus.requestFocus() } }
+            TrackMenu(
+                audioTracks = runCatching { player.audioTracks?.toList() }.getOrNull().orEmpty(),
+                subtitleTracks = runCatching { player.spuTracks?.toList() }.getOrNull().orEmpty(),
+                currentAudio = player.audioTrack,
+                currentSubtitle = player.spuTrack,
+                firstFocus = tracksFocus,
+                onSelectAudio = { id -> player.audioTrack = id; showTracks = false; focusRequester.requestFocus() },
+                onSelectSubtitle = { id -> player.spuTrack = id; showTracks = false; focusRequester.requestFocus() },
+                modifier = Modifier.align(Alignment.CenterEnd),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TrackMenu(
+    audioTracks: List<MediaPlayer.TrackDescription>,
+    subtitleTracks: List<MediaPlayer.TrackDescription>,
+    currentAudio: Int,
+    currentSubtitle: Int,
+    firstFocus: FocusRequester,
+    onSelectAudio: (Int) -> Unit,
+    onSelectSubtitle: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    androidx.compose.foundation.lazy.LazyColumn(
+        modifier = modifier
+            .fillMaxWidth(0.42f)
+            .background(Color(0xF0101014))
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        item {
+            Text("Audio", style = MaterialTheme.typography.titleLarge, color = Color.White)
+        }
+        itemsIndexed(audioTracks) { index, track ->
+            TrackButton(
+                label = track.name + if (track.id == currentAudio) "  ✓" else "",
+                onClick = { onSelectAudio(track.id) },
+                modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier,
+            )
+        }
+        item {
+            Text(
+                "Subtitles",
+                style = MaterialTheme.typography.titleLarge,
+                color = Color.White,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+        }
+        items(subtitleTracks) { track ->
+            TrackButton(
+                label = track.name + if (track.id == currentSubtitle) "  ✓" else "",
+                onClick = { onSelectSubtitle(track.id) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun TrackButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    com.dionysus.tv.ui.components.AppButton(onClick = onClick, modifier = modifier.fillMaxWidth()) {
+        Text(label)
     }
 }
 
@@ -202,7 +277,6 @@ private fun PlayerControls(
     isPlaying: Boolean,
     positionMs: Long,
     lengthMs: Long,
-    onPlayPause: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -244,7 +318,7 @@ private fun PlayerControls(
             Text(formatTime(lengthMs), style = MaterialTheme.typography.bodyMedium, color = Color.White)
         }
         Text(
-            text = "OK: play/pause   ◄ ►: skip 10s   Back: exit",
+            text = "OK: play/pause   ◄ ►: skip 10s   ▲: audio/subtitles   Back: exit",
             style = MaterialTheme.typography.bodyMedium,
             color = Color(0xAAFFFFFF),
         )

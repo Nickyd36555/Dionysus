@@ -19,7 +19,13 @@ class DownloadsViewModel @Inject constructor(
     val downloads: StateFlow<List<DownloadEntity>> = repository.downloads()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    fun cancel(download: DownloadEntity) = repository.cancel(download)
+    fun pause(download: DownloadEntity) {
+        viewModelScope.launch { repository.pause(download) }
+    }
+
+    fun resume(download: DownloadEntity) {
+        viewModelScope.launch { repository.resume(download) }
+    }
 
     fun delete(download: DownloadEntity) {
         viewModelScope.launch { repository.delete(download) }
