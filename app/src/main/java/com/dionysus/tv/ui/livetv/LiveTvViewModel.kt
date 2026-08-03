@@ -7,6 +7,7 @@ import com.dionysus.tv.core.model.MediaItem
 import com.dionysus.tv.data.iptv.CategoryGrouping
 import com.dionysus.tv.data.iptv.Channel
 import com.dionysus.tv.data.iptv.IptvRepository
+import com.dionysus.tv.data.iptv.LiveSession
 import com.dionysus.tv.data.iptv.NowNext
 import com.dionysus.tv.data.iptv.Programme
 import com.dionysus.tv.data.settings.SettingsRepository
@@ -129,7 +130,21 @@ data class LiveTvUiState(
 class LiveTvViewModel @Inject constructor(
     private val iptv: IptvRepository,
     private val settings: SettingsRepository,
+    private val liveSession: LiveSession,
 ) : ViewModel() {
+
+    /** The channel to focus in the guide (the one last watched), if any. */
+    val lastFocusedChannelId: String? get() = liveSession.lastFocusedId
+
+    /** Hand the current category's channels + EPG to the full-screen live player. */
+    fun startLive(channel: Channel) {
+        liveSession.channels = state.value.visibleChannels
+        liveSession.startId = channel.id
+        liveSession.lastFocusedId = channel.id
+        liveSession.epg = state.value.epg
+        liveSession.shortEpg = state.value.shortEpg.toMutableMap()
+        liveSession.nowOffsetMs = state.value.epgOffsetMinutes * 60_000L
+    }
 
     private val _state = MutableStateFlow(LiveTvUiState())
     val state: StateFlow<LiveTvUiState> = _state.asStateFlow()

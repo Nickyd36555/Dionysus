@@ -7,6 +7,7 @@ object Routes {
     const val SPLASH = "splash"
     const val HOME = "home"
     const val LIVE_TV = "livetv"
+    const val LIVE_PLAYER = "liveplayer"
     const val MOVIES = "movies"
     const val SEARCH = "search"
     const val DOWNLOADS = "downloads"

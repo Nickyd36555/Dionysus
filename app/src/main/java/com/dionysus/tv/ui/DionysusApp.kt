@@ -13,6 +13,7 @@ import com.dionysus.tv.ui.components.MainScaffold
 import com.dionysus.tv.ui.detail.DetailScreen
 import com.dionysus.tv.ui.downloads.DownloadsScreen
 import com.dionysus.tv.ui.home.HomeScreen
+import com.dionysus.tv.ui.livetv.LiveTvPlayerScreen
 import com.dionysus.tv.ui.livetv.LiveTvScreen
 import com.dionysus.tv.ui.livetv.MoviesScreen
 import com.dionysus.tv.ui.navigation.Routes
@@ -46,9 +47,13 @@ fun DionysusApp(navController: NavHostController = rememberNavController()) {
         composable(Routes.LIVE_TV) {
             TopLevel(navController) {
                 LiveTvScreen(
-                    onPlay = { url, title -> navController.navigate(Routes.player(url, title)) },
+                    onOpenLive = { navController.navigate(Routes.LIVE_PLAYER) },
                 )
             }
+        }
+
+        composable(Routes.LIVE_PLAYER) {
+            LiveTvPlayerScreen(onBack = { navController.popBackStack() })
         }
 
         composable(Routes.MOVIES) {

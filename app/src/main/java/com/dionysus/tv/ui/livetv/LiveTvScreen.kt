@@ -34,6 +34,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,6 +47,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -67,10 +70,14 @@ import java.util.Locale
 
 @Composable
 fun LiveTvScreen(
-    onPlay: (url: String, title: String) -> Unit,
+    onOpenLive: () -> Unit,
     viewModel: LiveTvViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val onPlayChannel: (Channel) -> Unit = { channel ->
+        viewModel.startLive(channel)
+        onOpenLive()
+    }
 
     Column(
         modifier = Modifier
@@ -99,7 +106,7 @@ fun LiveTvScreen(
             else -> LiveView(
                 state = state,
                 viewModel = viewModel,
-                onPlay = onPlay,
+                onPlayChannel = onPlayChannel,
             )
         }
     }
@@ -162,7 +169,7 @@ private fun EpgUpdatingPill() {
 private fun LiveView(
     state: LiveTvUiState,
     viewModel: LiveTvViewModel,
-    onPlay: (String, String) -> Unit,
+    onPlayChannel: (Channel) -> Unit,
 ) {
     val channels = state.visibleChannels
     var previewChannel by androidx.compose.runtime.remember(state.selectedCategory) {
@@ -194,7 +201,8 @@ private fun LiveView(
                 programmesFor = viewModel::programmes,
                 zone = zone,
                 now = viewModel.nowMs(),
-                onPlay = onPlay,
+                restoreFocusId = viewModel.lastFocusedChannelId,
+                onPlayChannel = onPlayChannel,
                 onFocusChannel = { previewChannel = it; viewModel.prefetchGuide(listOf(it)) },
                 onToggleFavorite = viewModel::toggleFavorite,
             )
@@ -521,7 +529,8 @@ private fun EpgGuide(
     programmesFor: (Channel) -> List<Programme>,
     zone: java.util.TimeZone,
     now: Long,
-    onPlay: (String, String) -> Unit,
+    restoreFocusId: String?,
+    onPlayChannel: (Channel) -> Unit,
     onFocusChannel: (Channel) -> Unit,
     onToggleFavorite: (Channel) -> Unit,
 ) {
@@ -530,6 +539,16 @@ private fun EpgGuide(
         return
     }
     val slotMs = SLOT_MIN * 60_000L
+    val listState = rememberLazyListState()
+    val restoreFocus = remember { FocusRequester() }
+    // Return focus to the channel you were just watching (not the nav rail).
+    LaunchedEffect(restoreFocusId, channels.size) {
+        val idx = channels.indexOfFirst { it.id == restoreFocusId }
+        if (idx >= 0) {
+            runCatching { listState.scrollToItem(idx) }
+            runCatching { restoreFocus.requestFocus() }
+        }
+    }
     // Start the timeline at the current half-hour so the on-now show is leftmost
     // (fully-past programmes are dropped), matching how TiViMate lays it out.
     val timelineStart = (now / slotMs) * slotMs
@@ -561,7 +580,7 @@ private fun EpgGuide(
             }
         }
 
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(channels, key = { it.id }) { channel ->
                 Row(
                     modifier = Modifier.height(GUIDE_ROW_HEIGHT),
@@ -571,7 +590,8 @@ private fun EpgGuide(
                         number = channels.indexOf(channel) + 1,
                         channel = channel,
                         favorite = channel.id in favorites,
-                        onClick = { onPlay(channel.streamUrl, channel.name) },
+                        modifier = if (channel.id == restoreFocusId) Modifier.focusRequester(restoreFocus) else Modifier,
+                        onClick = { onPlayChannel(channel) },
                         onLongClick = { onToggleFavorite(channel) },
                         onFocused = { onFocusChannel(channel) },
                     )
@@ -593,7 +613,7 @@ private fun EpgGuide(
                                 time = "${formatClock(prog.startMs, zone)}–${formatClock(prog.stopMs, zone)}",
                                 title = prog.title,
                                 isNow = now in prog.startMs until prog.stopMs,
-                                onClick = { onPlay(channel.streamUrl, "${channel.name} — ${prog.title}") },
+                                onClick = { onPlayChannel(channel) },
                             )
                             cursor = prog.stopMs
                         }
@@ -603,7 +623,7 @@ private fun EpgGuide(
                                 time = "",
                                 title = "No guide data — press to watch",
                                 isNow = false,
-                                onClick = { onPlay(channel.streamUrl, channel.name) },
+                                onClick = { onPlayChannel(channel) },
                             )
                         }
                     }
@@ -638,6 +658,7 @@ private fun ChannelLabel(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onFocused: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
@@ -645,7 +666,7 @@ private fun ChannelLabel(
         androidx.compose.runtime.LaunchedEffect(Unit) { onFocused() }
     }
     Row(
-        modifier = Modifier
+        modifier = modifier
             .width(CHANNEL_COL_WIDTH)
             .fillMaxHeight()
             .padding(end = 8.dp)
@@ -849,5 +870,5 @@ private fun clockOf(zone: java.util.TimeZone): SimpleDateFormat =
     fmtCache.getOrPut("c|${zone.id}") { SimpleDateFormat("h:mm a", Locale.getDefault()).apply { timeZone = zone } }
 private fun dayOf(zone: java.util.TimeZone): SimpleDateFormat =
     fmtCache.getOrPut("d|${zone.id}") { SimpleDateFormat("EEE, d MMM", Locale.getDefault()).apply { timeZone = zone } }
-private fun formatClock(ms: Long, zone: java.util.TimeZone): String = clockOf(zone).format(Date(ms))
-private fun formatDay(ms: Long, zone: java.util.TimeZone): String = dayOf(zone).format(Date(ms))
+internal fun formatClock(ms: Long, zone: java.util.TimeZone): String = clockOf(zone).format(Date(ms))
+internal fun formatDay(ms: Long, zone: java.util.TimeZone): String = dayOf(zone).format(Date(ms))
