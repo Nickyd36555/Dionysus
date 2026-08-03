@@ -31,8 +31,8 @@ android {
         targetSdk = 34
         // CI overrides these from the pushed tag so the APK's version matches
         // the GitHub Release the in-app updater compares against.
-        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 206
-        versionName = System.getenv("VERSION_NAME") ?: "0.2.6"
+        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 207
+        versionName = System.getenv("VERSION_NAME") ?: "0.2.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -44,7 +44,7 @@ android {
         // Limit LibVLC native libs to the ABIs we target (real TVs + emulator)
         // to keep the APK from ballooning across every architecture.
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
         }
     }
 

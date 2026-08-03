@@ -1,17 +1,22 @@
 package com.dionysus.tv.data.addons
 
+import android.content.Context
 import android.util.Log
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
 import com.dionysus.tv.core.model.DataResult
 import com.dionysus.tv.core.model.MediaItem
 import com.dionysus.tv.core.model.MediaType
-import com.dionysus.tv.data.local.dao.AddonDao
-import com.dionysus.tv.data.local.entity.InstalledAddonEntity
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -19,12 +24,13 @@ import kotlinx.serialization.json.contentOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private val Context.addonStore by preferencesDataStore(name = "dionysus_addons")
+
 /** An installed Stremio addon plus the base URL its resources are served from. */
 data class Addon(
     val transportUrl: String,
     val manifest: AddonManifest,
 ) {
-    /** Everything up to and including the last '/' before manifest.json. */
     val base: String = transportUrl.substringBeforeLast('/', "").ifEmpty { transportUrl }.let {
         if (it.endsWith("/")) it else "$it/"
     }
@@ -42,18 +48,24 @@ data class Addon(
     val providesMeta: Boolean get() = "meta" in resourceNames
 }
 
+/** Persisted form of an installed addon. */
+@Serializable
+data class StoredAddon(val transportUrl: String, val manifest: AddonManifest)
+
+/**
+ * Installed addons are persisted in DataStore (same durable store as the app's
+ * other settings) so they survive restarts and updates.
+ */
 @Singleton
 class AddonRepository @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val api: AddonApi,
-    private val dao: AddonDao,
     private val json: Json,
 ) {
-    val installedAddons: Flow<List<Addon>> = dao.observeAll().map { list ->
-        list.mapNotNull { entity ->
-            runCatching {
-                Addon(entity.transportUrl, json.decodeFromString(AddonManifest.serializer(), entity.manifestJson))
-            }.getOrNull()
-        }
+    private val listSerializer = ListSerializer(StoredAddon.serializer())
+
+    val installedAddons: Flow<List<Addon>> = context.addonStore.data.map { prefs ->
+        decode(prefs[KEY]).map { Addon(it.transportUrl, it.manifest) }
     }
 
     suspend fun current(): List<Addon> = installedAddons.first()
@@ -62,20 +74,29 @@ class AddonRepository @Inject constructor(
     suspend fun install(manifestUrl: String): DataResult<Addon> = DataResult.catching {
         val url = manifestUrl.trim()
         val manifest = api.manifest(url)
-        val position = dao.maxPosition() + 1
-        dao.insert(
-            InstalledAddonEntity(
-                transportUrl = url,
-                name = manifest.name,
-                manifestJson = json.encodeToString(AddonManifest.serializer(), manifest),
-                position = position,
-                installedAt = AddonClock.now(),
-            ),
-        )
+        val stored = readStored().toMutableList()
+        stored.removeAll { it.transportUrl == url }
+        stored.add(StoredAddon(url, manifest))
+        writeStored(stored)
         Addon(url, manifest)
     }
 
-    suspend fun remove(transportUrl: String) = dao.remove(transportUrl)
+    suspend fun remove(transportUrl: String) {
+        writeStored(readStored().filterNot { it.transportUrl == transportUrl })
+    }
+
+    private suspend fun readStored(): List<StoredAddon> =
+        decode(context.addonStore.data.first()[KEY])
+
+    private suspend fun writeStored(list: List<StoredAddon>) {
+        val encoded = json.encodeToString(listSerializer, list)
+        context.addonStore.edit { it[KEY] = encoded }
+    }
+
+    private fun decode(raw: String?): List<StoredAddon> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return runCatching { json.decodeFromString(listSerializer, raw) }.getOrDefault(emptyList())
+    }
 
     /** Fetch a catalog's items and map them to domain [MediaItem]s. */
     suspend fun catalog(addon: Addon, def: AddonCatalogDef): List<MediaItem> = try {
@@ -133,12 +154,8 @@ class AddonRepository @Inject constructor(
     companion object {
         private const val TAG = "AddonRepository"
         private const val ENRICH_LIMIT = 20
+        private val KEY = stringPreferencesKey("installed_addons_json")
     }
-}
-
-/** Tiny indirection so the repository stays unit-testable without a clock dep. */
-object AddonClock {
-    fun now(): Long = System.currentTimeMillis()
 }
 
 /** Maps a Stremio meta object into the app's domain model. */

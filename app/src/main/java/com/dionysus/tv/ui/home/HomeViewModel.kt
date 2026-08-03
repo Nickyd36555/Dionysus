@@ -91,7 +91,9 @@ class HomeViewModel @Inject constructor(
         val addonFetched = catalogDefs.map { (addon, def) ->
             async {
                 val key = "${addon.transportUrl}|${def.type}|${def.id}"
-                val items = addonCatalogCache[key] ?: addons.catalog(addon, def).also { addonCatalogCache[key] = it }
+                // Only cache non-empty results so a transient failure retries later.
+                val items = addonCatalogCache[key]
+                    ?: addons.catalog(addon, def).also { if (it.isNotEmpty()) addonCatalogCache[key] = it }
                 Triple(addon, def, items)
             }
         }.awaitAll()
@@ -102,7 +104,7 @@ class HomeViewModel @Inject constructor(
                 HomeRowKind.MY_LIST -> snapshot.favorites
                 HomeRowKind.DOWNLOADS -> snapshot.downloads.map { it.toMediaItem() }
                 else -> catalog(row.kind)
-            }
+            }.distinctBy { it.id }
             if (items.isEmpty()) null else HomeRowUi(row.id, row.title, items)
         }
 
@@ -112,7 +114,7 @@ class HomeViewModel @Inject constructor(
                 HomeRowUi(
                     "addon:${addon.transportUrl}|${def.type}|${def.id}",
                     catalogTitle(addon.manifest.name, def.name, def.type),
-                    items,
+                    items.distinctBy { it.id },
                 )
             }
 

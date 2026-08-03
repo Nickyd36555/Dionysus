@@ -31,7 +31,7 @@ class SearchViewModel @Inject constructor(
         .distinctUntilChanged()
         .mapLatest { q ->
             if (q.trim().length < 2) emptyList()
-            else metadata.search(q.trim()).getOrNull().orEmpty()
+            else metadata.search(q.trim()).getOrNull().orEmpty().distinctBy { it.id }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 

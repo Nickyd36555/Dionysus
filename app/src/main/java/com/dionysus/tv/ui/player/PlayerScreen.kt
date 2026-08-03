@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +36,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -64,7 +66,18 @@ fun PlayerScreen(
     val libVlc = remember {
         LibVLC(
             context,
-            arrayListOf("--network-caching=2000", "--no-drop-late-frames", "--no-skip-frames", "--audio-time-stretch"),
+            arrayListOf(
+                "--network-caching=3000",
+                "--file-caching=3000",
+                "--live-caching=3000",
+                "--no-drop-late-frames",
+                "--no-skip-frames",
+                // Disable hardware direct-rendering, which causes green/blocky
+                // glitches on many Android TV devices; slight cost, far smoother.
+                "--no-mediacodec-dr",
+                "--no-omxil-dr",
+                "--audio-time-stretch",
+            ),
         )
     }
     val player = remember { MediaPlayer(libVlc) }
@@ -141,6 +154,9 @@ fun PlayerScreen(
             .background(Color.Black)
             .focusRequester(focusRequester)
             .focusable()
+            .pointerInput(Unit) {
+                detectTapGestures { controlsVisible = !controlsVisible; interaction++ }
+            }
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 when (event.key) {
@@ -158,6 +174,10 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
                 VLCVideoLayout(ctx).also { layout ->
+                    // Keep focus on the Compose key handler, not the video surface.
+                    layout.isFocusable = false
+                    layout.isFocusableInTouchMode = false
+                    layout.descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
                     player.attachViews(layout, null, true, false)
                 }
             },
