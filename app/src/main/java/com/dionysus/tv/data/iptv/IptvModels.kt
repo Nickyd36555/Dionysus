@@ -25,6 +25,7 @@ data class StoredPlaylist(
 )
 
 /** A single live channel resolved from a playlist, ready to play. */
+@Serializable
 data class Channel(
     val id: String,
     val name: String,
@@ -53,6 +54,14 @@ data class Programme(
 data class EpgCache(
     val savedAtMs: Long,
     val programmes: Map<String, List<Programme>>,
+)
+
+/** Persisted channels + VOD so Live TV paints instantly, then refreshes. */
+@Serializable
+data class ContentCache(
+    val savedAtMs: Long,
+    val channels: List<Channel>,
+    val vod: List<com.dionysus.tv.core.model.MediaItem>,
 )
 
 /** The now/next pair used to annotate channel cards and the guide. */

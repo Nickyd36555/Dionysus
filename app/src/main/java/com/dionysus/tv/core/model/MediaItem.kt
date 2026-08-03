@@ -1,6 +1,9 @@
 package com.dionysus.tv.core.model
 
+import kotlinx.serialization.Serializable
+
 /** Whether a catalog entry is a film or an episodic series. */
+@Serializable
 enum class MediaType { MOVIE, TV_SHOW }
 
 /**
@@ -8,6 +11,7 @@ enum class MediaType { MOVIE, TV_SHOW }
  * selecting it opens the detail/scrape flow (DIONYSUS) or plays directly (VOD,
  * LIVE_TV, which already carry a stream URL).
  */
+@Serializable
 enum class MediaSource(val label: String) {
     DIONYSUS("Dionysus"),
     VOD("VOD"),
@@ -19,6 +23,7 @@ enum class MediaSource(val label: String) {
  * configured metadata provider (TMDB by default); playable streams are resolved
  * separately via [com.dionysus.tv.data.scraper.Scraper]s and debrid services.
  */
+@Serializable
 data class MediaItem(
     val id: String,
     val type: MediaType,

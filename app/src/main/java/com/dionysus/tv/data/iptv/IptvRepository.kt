@@ -142,6 +142,7 @@ class IptvRepository @Inject constructor(
         cachedVod = emptyList()
         cachedEpg = emptyMap()
         runCatching { if (epgCacheFile.exists()) epgCacheFile.delete() }
+        runCatching { if (contentCacheFile.exists()) contentCacheFile.delete() }
     }
 
     suspend fun toggleFavorite(channelId: String) {
@@ -208,15 +209,59 @@ class IptvRepository @Inject constructor(
         return results
     }
 
-    /** Populate the in-memory caches once (channels, VOD, EPG). */
-    private suspend fun ensureLoaded() {
-        if (loaded) return
+    private val contentCacheFile: File by lazy { File(context.filesDir, "iptv_content.json") }
+
+    /** Instant channels + VOD for first paint: memory, then disk (any age), no network. */
+    suspend fun cachedContentOrDisk(): Pair<List<Channel>, List<MediaItem>> = withContext(Dispatchers.IO) {
+        if (cachedChannels.isNotEmpty() || cachedVod.isNotEmpty()) return@withContext cachedChannels to cachedVod
+        readContentDisk()?.let { cachedChannels = it.channels; cachedVod = it.vod }
+        cachedChannels to cachedVod
+    }
+
+    /** Force a fresh network load of channels + VOD, updating memory and disk. */
+    suspend fun refreshContent(): Pair<List<Channel>, List<MediaItem>> {
         val defs = runCatching { playlists.first() }.getOrDefault(emptyList())
-        if (defs.isEmpty()) { loaded = true; return }
-        cachedChannels = runCatching { fetchAllChannels(defs) }.getOrDefault(emptyList())
-        cachedVod = runCatching { fetchAllVod(defs) }.getOrDefault(emptyList())
-        cachedEpg = runCatching { loadEpg() }.getOrDefault(emptyMap())
+        if (defs.isEmpty()) {
+            cachedChannels = emptyList(); cachedVod = emptyList(); loaded = true
+            return emptyList<Channel>() to emptyList()
+        }
+        val ch = runCatching { fetchAllChannels(defs) }.getOrDefault(emptyList())
+        val vod = runCatching { fetchAllVod(defs) }.getOrDefault(emptyList())
+        if (ch.isNotEmpty() || vod.isNotEmpty()) {
+            cachedChannels = ch
+            cachedVod = vod
+            writeContentDisk(ch, vod)
+        }
         loaded = true
+        return cachedChannels to cachedVod
+    }
+
+    /** Populate the in-memory caches (channels, VOD): memory → disk → network. */
+    private suspend fun ensureLoaded() {
+        if (loaded && cachedChannels.isNotEmpty()) return
+        if (cachedChannels.isEmpty() && cachedVod.isEmpty()) {
+            withContext(Dispatchers.IO) { readContentDisk() }?.let {
+                cachedChannels = it.channels; cachedVod = it.vod
+            }
+        }
+        if (cachedChannels.isEmpty() && cachedVod.isEmpty()) {
+            refreshContent()
+        } else {
+            loaded = true
+        }
+        if (cachedEpg.isEmpty()) cachedEpg = runCatching { loadEpg() }.getOrDefault(emptyMap())
+    }
+
+    private fun readContentDisk(): ContentCache? = runCatching {
+        if (!contentCacheFile.exists()) return null
+        json.decodeFromString(ContentCache.serializer(), contentCacheFile.readText())
+    }.getOrNull()
+
+    private fun writeContentDisk(channels: List<Channel>, vod: List<MediaItem>) {
+        runCatching {
+            val cache = ContentCache(System.currentTimeMillis(), channels, vod)
+            contentCacheFile.writeText(json.encodeToString(ContentCache.serializer(), cache))
+        }
     }
 
     private suspend fun fetchAllChannels(defs: List<StoredPlaylist>): List<Channel> = coroutineScope {

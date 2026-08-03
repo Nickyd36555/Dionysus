@@ -167,30 +167,42 @@ class LiveTvViewModel @Inject constructor(
 
     fun refresh() {
         viewModelScope.launch {
-            _state.value = _state.value.copy(isLoading = true, error = null)
             val hasPlaylists = runCatching { iptv.playlists.first().isNotEmpty() }.getOrDefault(false)
-            val vod = iptv.loadVod().getOrNull().orEmpty()
-            when (val result = iptv.loadChannels()) {
-                is DataResult.Success -> {
-                    val channels = result.data
-                    _state.value = _state.value.copy(
-                        hasPlaylists = hasPlaylists,
-                        hasVod = vod.isNotEmpty(),
-                        isLoading = false,
-                        channels = channels,
-                        vod = vod,
-                        error = if (channels.isEmpty() && vod.isEmpty() && hasPlaylists) "No channels found in your playlists." else null,
-                    )
-                }
-                is DataResult.Error -> _state.value = _state.value.copy(
-                    isLoading = false,
+
+            // 1) Instant paint from memory/disk cache (no network) so Live TV opens
+            //    immediately instead of waiting ~a minute for the channel fetch.
+            val (cachedCh, cachedVod) = iptv.cachedContentOrDisk()
+            if (cachedCh.isNotEmpty() || cachedVod.isNotEmpty()) {
+                _state.value = _state.value.copy(
                     hasPlaylists = hasPlaylists,
-                    hasVod = vod.isNotEmpty(),
-                    vod = vod,
-                    error = result.message,
+                    hasVod = cachedVod.isNotEmpty(),
+                    channels = cachedCh,
+                    vod = cachedVod,
+                    isLoading = false,
+                    error = null,
                 )
+            } else {
+                _state.value = _state.value.copy(isLoading = true, hasPlaylists = hasPlaylists, error = null)
             }
-            loadEpg()
+            val instantEpg = iptv.cachedEpgOrDisk()
+            if (instantEpg.isNotEmpty()) _state.value = _state.value.copy(epg = instantEpg)
+
+            // 2) Refresh channels/VOD in the background (indicator shown), then EPG.
+            _state.value = _state.value.copy(epgLoading = true)
+            val (ch, vod) = iptv.refreshContent()
+            _state.value = _state.value.copy(
+                hasPlaylists = hasPlaylists,
+                hasVod = vod.isNotEmpty(),
+                channels = ch,
+                vod = vod,
+                isLoading = false,
+                error = if (ch.isEmpty() && vod.isEmpty() && hasPlaylists) "No channels found in your playlists." else null,
+            )
+            val freshEpg = iptv.loadEpg()
+            _state.value = _state.value.copy(
+                epg = if (freshEpg.isNotEmpty()) freshEpg else _state.value.epg,
+                epgLoading = false,
+            )
         }
     }
 
@@ -274,35 +286,6 @@ class LiveTvViewModel @Inject constructor(
             if (fetched.isNotEmpty()) {
                 _state.value = _state.value.copy(shortEpg = _state.value.shortEpg + fetched)
             }
-        }
-    }
-
-    private fun loadEpg() {
-        viewModelScope.launch {
-            // Instant: show any cached/disk EPG right away…
-            val instant = iptv.cachedEpgOrDisk()
-            if (instant.isNotEmpty()) _state.value = _state.value.copy(epg = instant)
-            // …then refresh in the background (one bulk XMLTV download), with a
-            // visible indicator so it doesn't look frozen.
-            _state.value = _state.value.copy(epgLoading = true)
-            val fresh = iptv.loadEpg()
-            _state.value = _state.value.copy(
-                epg = if (fresh.isNotEmpty()) fresh else _state.value.epg,
-                epgLoading = false,
-            )
-        }
-    }
-
-    /** Force a fresh bulk EPG download (from the manual refresh button). */
-    fun refreshEpg() {
-        viewModelScope.launch {
-            _state.value = _state.value.copy(epgLoading = true)
-            iptv.invalidateCache()
-            val fresh = iptv.loadEpg()
-            _state.value = _state.value.copy(
-                epg = if (fresh.isNotEmpty()) fresh else _state.value.epg,
-                epgLoading = false,
-            )
         }
     }
 
