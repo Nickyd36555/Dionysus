@@ -26,6 +26,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -135,6 +136,7 @@ class IptvRepository @Inject constructor(
         cachedChannels = emptyList()
         cachedVod = emptyList()
         cachedEpg = emptyMap()
+        runCatching { if (epgCacheFile.exists()) epgCacheFile.delete() }
     }
 
     suspend fun toggleFavorite(channelId: String) {
@@ -337,8 +339,40 @@ class IptvRepository @Inject constructor(
             .build()
     }
 
-    /** Fetch and merge EPG for every playlist that declares an XMLTV URL. */
-    suspend fun loadEpg(): Map<String, List<Programme>> = coroutineScope {
+    /** In-memory + on-disk EPG so the guide is instant on relaunch (TiViMate-style). */
+    private val epgCacheFile: File by lazy { File(context.filesDir, "epg_cache.json") }
+
+    /** Instant EPG for first paint: memory, then disk (any age), no network. */
+    suspend fun cachedEpgOrDisk(): Map<String, List<Programme>> = withContext(Dispatchers.IO) {
+        if (cachedEpg.isNotEmpty()) return@withContext cachedEpg
+        readEpgDisk()?.let { cachedEpg = it.programmes }
+        cachedEpg
+    }
+
+    /**
+     * The fast path: download the provider's whole XMLTV **once** (a single
+     * request, like TiViMate), parse it, and cache to disk. Uses fresh disk cache
+     * when available; falls back to stale cache if the network fetch fails.
+     */
+    suspend fun loadEpg(): Map<String, List<Programme>> = withContext(Dispatchers.IO) {
+        val disk = readEpgDisk()
+        val fresh = disk != null && (System.currentTimeMillis() - disk.savedAtMs) < EPG_TTL_MS
+        if (fresh) {
+            cachedEpg = disk!!.programmes
+            return@withContext cachedEpg
+        }
+        val merged = runCatching { fetchBulkEpg() }.getOrDefault(emptyMap())
+        when {
+            merged.isNotEmpty() -> {
+                cachedEpg = merged
+                writeEpgDisk(merged)
+            }
+            disk != null -> cachedEpg = disk.programmes // keep showing stale rather than nothing
+        }
+        cachedEpg
+    }
+
+    private suspend fun fetchBulkEpg(): Map<String, List<Programme>> = coroutineScope {
         val defs = runCatching { playlists.first() }.getOrDefault(emptyList())
         val maps = defs.filter { it.epgUrl.isNotBlank() }.map { pl ->
             async { runCatching { fetchEpg(pl.epgUrl) }.getOrDefault(emptyMap()) }
@@ -348,6 +382,18 @@ class IptvRepository @Inject constructor(
         // regardless of case/whitespace differences between the two endpoints.
         maps.forEach { m -> m.forEach { (k, v) -> val key = normEpgId(k); merged[key] = (merged[key].orEmpty() + v) } }
         merged
+    }
+
+    private fun readEpgDisk(): EpgCache? = runCatching {
+        if (!epgCacheFile.exists()) return null
+        json.decodeFromString(EpgCache.serializer(), epgCacheFile.readText())
+    }.getOrNull()
+
+    private fun writeEpgDisk(epg: Map<String, List<Programme>>) {
+        runCatching {
+            val cache = EpgCache(savedAtMs = System.currentTimeMillis(), programmes = epg)
+            epgCacheFile.writeText(json.encodeToString(EpgCache.serializer(), cache))
+        }
     }
 
     private suspend fun fetchEpg(url: String): Map<String, List<Programme>> = withContext(Dispatchers.IO) {
@@ -406,6 +452,7 @@ class IptvRepository @Inject constructor(
 
     companion object {
         private const val TAG = "IptvRepository"
+        private const val EPG_TTL_MS = 12 * 60 * 60 * 1000L // refresh bulk EPG every 12h
         private val KEY_PLAYLISTS = stringPreferencesKey("iptv_playlists_json")
         private val KEY_FAVORITES = stringSetPreferencesKey("iptv_favorites")
         private val KEY_HIDDEN_GROUPS = stringSetPreferencesKey("iptv_hidden_groups")

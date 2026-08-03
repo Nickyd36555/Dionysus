@@ -108,12 +108,6 @@ private fun LiveView(
     }
     val preview = previewChannel ?: channels.firstOrNull()
 
-    // Load per-channel EPG for the visible channels (fills the guide when the
-    // provider's global XMLTV is empty).
-    LaunchedEffect(state.selectedCategory, channels.size) {
-        viewModel.prefetchGuide(channels)
-    }
-
     Row(Modifier.fillMaxSize().padding(top = 12.dp)) {
         CategoryRail(
             state = state,

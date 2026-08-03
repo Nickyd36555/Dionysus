@@ -39,12 +39,20 @@ data class Channel(
 )
 
 /** One EPG entry (a programme airing on a channel). */
+@Serializable
 data class Programme(
     val epgId: String,
     val startMs: Long,
     val stopMs: Long,
     val title: String,
     val description: String = "",
+)
+
+/** Persisted, parsed EPG so the guide loads instantly on the next launch. */
+@Serializable
+data class EpgCache(
+    val savedAtMs: Long,
+    val programmes: Map<String, List<Programme>>,
 )
 
 /** The now/next pair used to annotate channel cards and the guide. */

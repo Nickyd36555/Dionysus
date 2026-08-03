@@ -251,8 +251,12 @@ class LiveTvViewModel @Inject constructor(
 
     private fun loadEpg() {
         viewModelScope.launch {
-            val epg = withContext(Dispatchers.Default) { iptv.loadEpg() }
-            if (epg.isNotEmpty()) _state.value = _state.value.copy(epg = epg)
+            // Instant: show any cached/disk EPG right away…
+            val instant = iptv.cachedEpgOrDisk()
+            if (instant.isNotEmpty()) _state.value = _state.value.copy(epg = instant)
+            // …then refresh in the background (one bulk XMLTV download).
+            val fresh = iptv.loadEpg()
+            if (fresh.isNotEmpty()) _state.value = _state.value.copy(epg = fresh)
         }
     }
 
