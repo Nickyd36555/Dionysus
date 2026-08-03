@@ -193,6 +193,7 @@ private fun LiveView(
                 favorites = state.favorites,
                 programmesFor = viewModel::programmes,
                 zone = zone,
+                now = viewModel.nowMs(),
                 onPlay = onPlay,
                 onFocusChannel = { previewChannel = it; viewModel.prefetchGuide(listOf(it)) },
                 onToggleFavorite = viewModel::toggleFavorite,
@@ -519,6 +520,7 @@ private fun EpgGuide(
     favorites: Set<String>,
     programmesFor: (Channel) -> List<Programme>,
     zone: java.util.TimeZone,
+    now: Long,
     onPlay: (String, String) -> Unit,
     onFocusChannel: (Channel) -> Unit,
     onToggleFavorite: (Channel) -> Unit,
@@ -527,7 +529,6 @@ private fun EpgGuide(
         CenterMessage("No channels in this category.")
         return
     }
-    val now = System.currentTimeMillis()
     val slotMs = SLOT_MIN * 60_000L
     // Start the timeline at the current half-hour so the on-now show is leftmost
     // (fully-past programmes are dropped), matching how TiViMate lays it out.

@@ -226,15 +226,15 @@ class LiveTvViewModel @Inject constructor(
     /** All EPG programmes for a channel (sorted): XMLTV if present, else per-channel. */
     fun programmes(channel: Channel): List<Programme> {
         val fromXmltv = channel.epgId?.let { _state.value.epg[iptv.normEpgId(it)] }.orEmpty()
-        val base = fromXmltv.ifEmpty { _state.value.shortEpg[channel.id].orEmpty() }
-        val offset = _state.value.epgOffsetMinutes * 60_000L
-        return if (offset == 0L) base
-        else base.map { it.copy(startMs = it.startMs + offset, stopMs = it.stopMs + offset) }
+        return fromXmltv.ifEmpty { _state.value.shortEpg[channel.id].orEmpty() }
     }
+
+    /** The guide's notion of "now": the device clock plus the user's correction. */
+    fun nowMs(): Long = System.currentTimeMillis() + _state.value.epgOffsetMinutes * 60_000L
 
     /** Upcoming programmes for a channel (now onward), for the guide rows. */
     fun upcoming(channel: Channel, limit: Int = 12): List<Programme> {
-        val now = System.currentTimeMillis()
+        val now = nowMs()
         return programmes(channel).filter { it.stopMs > now }.take(limit)
     }
 
@@ -303,7 +303,7 @@ class LiveTvViewModel @Inject constructor(
     fun nowNext(channel: Channel): NowNext {
         val list = programmes(channel)
         if (list.isEmpty()) return NowNext()
-        val now = System.currentTimeMillis()
+        val now = nowMs()
         val current = list.firstOrNull { now in it.startMs until it.stopMs }
         val next = list.firstOrNull { it.startMs >= now }
         return NowNext(current, next)

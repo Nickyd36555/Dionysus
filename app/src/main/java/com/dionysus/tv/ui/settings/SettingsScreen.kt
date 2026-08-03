@@ -345,13 +345,13 @@ fun SettingsScreen(
                 }) { Text("Timezone: $currentTzLabel") }
 
                 Text(
-                    "Fine-tune offset: ${formatOffset(state.epgOffsetMinutes)}",
+                    "Clock correction: ${formatOffset(state.epgOffsetMinutes)}",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(top = 12.dp),
                 )
                 Text(
-                    "Only needed if a provider's guide is still shifted after setting the timezone.",
+                    "If the red NOW line sits on the wrong show (this device's clock is off), shift the current-time marker here until NOW lands on what's actually airing. E.g. if the guide thinks it's 6 AM but it's really 2 PM, add +8h.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
