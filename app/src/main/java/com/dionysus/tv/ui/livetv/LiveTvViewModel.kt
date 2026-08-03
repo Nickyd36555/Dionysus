@@ -57,6 +57,7 @@ data class LiveTvUiState(
     val epg: Map<String, List<Programme>> = emptyMap(),
     /** Per-channel EPG (keyed by channel id) fetched on demand via get_short_epg. */
     val shortEpg: Map<String, List<Programme>> = emptyMap(),
+    val epgLoading: Boolean = false,
     val error: String? = null,
 ) {
     private fun visibleGroupChannels() =
@@ -254,9 +255,27 @@ class LiveTvViewModel @Inject constructor(
             // Instant: show any cached/disk EPG right away…
             val instant = iptv.cachedEpgOrDisk()
             if (instant.isNotEmpty()) _state.value = _state.value.copy(epg = instant)
-            // …then refresh in the background (one bulk XMLTV download).
+            // …then refresh in the background (one bulk XMLTV download), with a
+            // visible indicator so it doesn't look frozen.
+            _state.value = _state.value.copy(epgLoading = true)
             val fresh = iptv.loadEpg()
-            if (fresh.isNotEmpty()) _state.value = _state.value.copy(epg = fresh)
+            _state.value = _state.value.copy(
+                epg = if (fresh.isNotEmpty()) fresh else _state.value.epg,
+                epgLoading = false,
+            )
+        }
+    }
+
+    /** Force a fresh bulk EPG download (from the manual refresh button). */
+    fun refreshEpg() {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(epgLoading = true)
+            iptv.invalidateCache()
+            val fresh = iptv.loadEpg()
+            _state.value = _state.value.copy(
+                epg = if (fresh.isNotEmpty()) fresh else _state.value.epg,
+                epgLoading = false,
+            )
         }
     }
 

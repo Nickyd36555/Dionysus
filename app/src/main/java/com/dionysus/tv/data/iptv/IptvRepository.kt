@@ -104,6 +104,7 @@ class IptvRepository @Inject constructor(
         host: String,
         username: String,
         password: String,
+        epgUrl: String = "",
     ): DataResult<Unit> = DataResult.catching {
         val base = normalizeHost(host)
         require(base.startsWith("http")) { "Enter a valid Xtream server URL (http://host:port)." }
@@ -112,6 +113,10 @@ class IptvRepository @Inject constructor(
         val body = fetchText(authUrl)
         val auth = runCatching { json.parseToJsonElement(body).jsonObjectOrNull()?.get("user_info") }.getOrNull()
         require(auth != null) { "Server didn't accept those Xtream credentials." }
+        // Use a custom EPG URL if provided, otherwise the provider's own xmltv.php.
+        val epg = epgUrl.trim().ifBlank {
+            "$base/xmltv.php?username=${username.trim()}&password=${password.trim()}"
+        }
         val playlist = StoredPlaylist(
             id = UUID.randomUUID().toString(),
             name = name.ifBlank { "Xtream" },
@@ -119,7 +124,7 @@ class IptvRepository @Inject constructor(
             host = base,
             username = username.trim(),
             password = password.trim(),
-            epgUrl = "$base/xmltv.php?username=${username.trim()}&password=${password.trim()}",
+            epgUrl = epg,
         )
         savePlaylist(playlist)
     }
@@ -307,8 +312,10 @@ class IptvRepository @Inject constructor(
             val listings = root["epg_listings"] as? JsonArray ?: return emptyList()
             listings.mapNotNull { el ->
                 val o = el as? JsonObject ?: return@mapNotNull null
-                val start = o.str("start_timestamp").toLongOrNull()?.times(1000) ?: return@mapNotNull null
-                val stop = o.str("stop_timestamp").toLongOrNull()?.times(1000) ?: (start + 1_800_000)
+                val start = o.str("start_timestamp").toLongOrNull()?.times(1000)
+                    ?: parseXtreamDate(o.str("start")) ?: return@mapNotNull null
+                val stop = o.str("stop_timestamp").toLongOrNull()?.times(1000)
+                    ?: parseXtreamDate(o.str("end")) ?: (start + 1_800_000)
                 val title = decodeB64(o.str("title")).ifBlank { return@mapNotNull null }
                 Programme(
                     epgId = channel.id,
@@ -320,6 +327,10 @@ class IptvRepository @Inject constructor(
             }.sortedBy { it.startMs }
         }.getOrDefault(emptyList())
     }
+
+    private val xtreamDateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+    private fun parseXtreamDate(value: String): Long? =
+        if (value.isBlank()) null else runCatching { xtreamDateFormat.parse(value)?.time }.getOrNull()
 
     private fun decodeB64(value: String): String {
         if (value.isBlank()) return ""
@@ -397,7 +408,10 @@ class IptvRepository @Inject constructor(
     }
 
     private suspend fun fetchEpg(url: String): Map<String, List<Programme>> = withContext(Dispatchers.IO) {
-        val request = Request.Builder().url(url).header("Accept-Encoding", "gzip").build()
+        val request = Request.Builder().url(url)
+            .header("Accept-Encoding", "gzip")
+            .header("User-Agent", IPTV_USER_AGENT)
+            .build()
         epgClient.newCall(request).execute().use { resp ->
             if (!resp.isSuccessful) return@use emptyMap<String, List<Programme>>()
             val bytes = resp.body ?: return@use emptyMap<String, List<Programme>>()
@@ -409,7 +423,9 @@ class IptvRepository @Inject constructor(
     }
 
     private suspend fun fetchText(url: String): String = withContext(Dispatchers.IO) {
-        val request = Request.Builder().url(url).build()
+        // Some IPTV panels reject non-media-player User-Agents (serving empty data),
+        // so identify as a player like TiViMate/VLC do.
+        val request = Request.Builder().url(url).header("User-Agent", IPTV_USER_AGENT).build()
         client.newCall(request).execute().use { resp ->
             if (!resp.isSuccessful) error("HTTP ${resp.code}")
             resp.body?.string().orEmpty()
@@ -453,6 +469,8 @@ class IptvRepository @Inject constructor(
     companion object {
         private const val TAG = "IptvRepository"
         private const val EPG_TTL_MS = 12 * 60 * 60 * 1000L // refresh bulk EPG every 12h
+        // Identify as a media player; some panels only serve EPG to known UAs.
+        private const val IPTV_USER_AGENT = "VLC/3.0.20 LibVLC/3.0.20"
         private val KEY_PLAYLISTS = stringPreferencesKey("iptv_playlists_json")
         private val KEY_FAVORITES = stringSetPreferencesKey("iptv_favorites")
         private val KEY_HIDDEN_GROUPS = stringSetPreferencesKey("iptv_hidden_groups")

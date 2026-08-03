@@ -288,6 +288,7 @@ fun SettingsScreen(
                 SettingTextField(label = "Server URL (http://host:port)", value = state.xtreamHost, onValueChange = viewModel::setXtreamHost)
                 SettingTextField(label = "Username", value = state.xtreamUser, onValueChange = viewModel::setXtreamUser)
                 SettingTextField(label = "Password", value = state.xtreamPass, onValueChange = viewModel::setXtreamPass, isSecret = true)
+                SettingTextField(label = "EPG URL — optional (leave blank for provider default)", value = state.xtreamEpg, onValueChange = viewModel::setXtreamEpg)
                 AppButton(onClick = viewModel::addXtreamPlaylist) { Text("Add Xtream account") }
             }
         }

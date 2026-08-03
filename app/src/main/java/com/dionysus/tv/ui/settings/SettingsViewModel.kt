@@ -62,6 +62,7 @@ data class SettingsUiState(
     val xtreamHost: String = "",
     val xtreamUser: String = "",
     val xtreamPass: String = "",
+    val xtreamEpg: String = "",
     val editingPlaylistId: String? = null,
 )
 
@@ -102,6 +103,7 @@ class SettingsViewModel @Inject constructor(
     fun setXtreamHost(v: String) { _state.value = _state.value.copy(xtreamHost = v) }
     fun setXtreamUser(v: String) { _state.value = _state.value.copy(xtreamUser = v) }
     fun setXtreamPass(v: String) { _state.value = _state.value.copy(xtreamPass = v) }
+    fun setXtreamEpg(v: String) { _state.value = _state.value.copy(xtreamEpg = v) }
 
     fun addM3uPlaylist() {
         val s = _state.value
@@ -128,11 +130,11 @@ class SettingsViewModel @Inject constructor(
         if (s.xtreamHost.isBlank() || s.xtreamUser.isBlank()) return
         viewModelScope.launch {
             _state.value = _state.value.copy(statusMessage = "Connecting to Xtream server…")
-            when (val r = iptv.addXtream(s.xtreamName, s.xtreamHost, s.xtreamUser, s.xtreamPass)) {
+            when (val r = iptv.addXtream(s.xtreamName, s.xtreamHost, s.xtreamUser, s.xtreamPass, s.xtreamEpg)) {
                 is DataResult.Success -> {
                     s.editingPlaylistId?.let { iptv.remove(it) }
                     _state.value = _state.value.copy(
-                        xtreamName = "", xtreamHost = "", xtreamUser = "", xtreamPass = "", editingPlaylistId = null,
+                        xtreamName = "", xtreamHost = "", xtreamUser = "", xtreamPass = "", xtreamEpg = "", editingPlaylistId = null,
                         statusMessage = "Xtream account saved.",
                     )
                 }
@@ -152,6 +154,7 @@ class SettingsViewModel @Inject constructor(
                 xtreamHost = playlist.host,
                 xtreamUser = playlist.username,
                 xtreamPass = playlist.password,
+                xtreamEpg = playlist.epgUrl,
                 statusMessage = "Editing \"${playlist.name}\" — change fields and press Add Xtream account to save.",
             )
         } else {
