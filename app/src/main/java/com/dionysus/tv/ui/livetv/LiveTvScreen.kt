@@ -7,6 +7,7 @@ package com.dionysus.tv.ui.livetv
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -21,11 +22,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -42,9 +45,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.dionysus.tv.data.iptv.Channel
+import com.dionysus.tv.data.iptv.Programme
 import com.dionysus.tv.ui.components.AppListItem
+import com.dionysus.tv.ui.components.MediaCard
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun LiveTvScreen(
@@ -59,50 +67,90 @@ fun LiveTvScreen(
             .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 32.dp, vertical = 24.dp),
     ) {
-        Text(
-            "Live TV",
-            style = MaterialTheme.typography.headlineLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(bottom = 8.dp),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Live TV",
+                style = MaterialTheme.typography.headlineLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            if (state.hasPlaylists) {
+                ModeToggle(
+                    mode = state.mode,
+                    onSelect = viewModel::setMode,
+                )
+            }
+        }
 
         when {
             !state.hasPlaylists && !state.isLoading -> EmptyState()
-            state.isLoading && state.channels.isEmpty() ->
+            state.isLoading && state.channels.isEmpty() && state.vod.isEmpty() ->
                 CenterMessage("Loading channels…")
-            else -> Row(Modifier.fillMaxSize()) {
+            state.mode == LiveTvMode.GUIDE -> EpgGuide(
+                channels = state.guideChannels,
+                upcomingFor = viewModel::upcoming,
+                onPlay = onPlay,
+            )
+            else -> Row(Modifier.fillMaxSize().padding(top = 12.dp)) {
                 CategoryRail(
                     categories = state.categories,
                     selected = state.selectedCategory,
                     onSelect = viewModel::selectCategory,
                     modifier = Modifier.width(240.dp).fillMaxHeight(),
                 )
-                val channels = state.visibleChannels
-                if (channels.isEmpty()) {
-                    CenterMessage(state.error ?: "No channels here yet.")
-                } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(200.dp),
-                        modifier = Modifier.fillMaxSize().padding(start = 16.dp),
-                        contentPadding = PaddingValues(8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        items(channels, key = { it.id }) { channel ->
-                            ChannelCard(
-                                channel = channel,
-                                favorite = channel.id in state.favorites,
-                                nowTitle = viewModel.nowNext(channel).now?.title,
-                                onClick = { onPlay(channel.streamUrl, channel.name) },
-                                onLongClick = { viewModel.toggleFavorite(channel) },
-                            )
-                        }
+                Box(Modifier.fillMaxSize().padding(start = 16.dp)) {
+                    if (state.showingVod) {
+                        VodGrid(vod = state.vod, onPlay = onPlay)
+                    } else {
+                        ChannelGrid(
+                            channels = state.visibleChannels,
+                            favorites = state.favorites,
+                            error = state.error,
+                            nowTitleFor = { viewModel.nowNext(it).now?.title },
+                            onPlay = onPlay,
+                            onToggleFavorite = viewModel::toggleFavorite,
+                        )
                     }
                 }
             }
         }
     }
 }
+
+@Composable
+private fun ModeToggle(mode: LiveTvMode, onSelect: (LiveTvMode) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        TogglePill("Channels", mode == LiveTvMode.CHANNELS) { onSelect(LiveTvMode.CHANNELS) }
+        TogglePill("TV Guide", mode == LiveTvMode.GUIDE) { onSelect(LiveTvMode.GUIDE) }
+    }
+}
+
+@Composable
+private fun TogglePill(label: String, selected: Boolean, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val shape = RoundedCornerShape(20.dp)
+    val bg = when {
+        focused -> MaterialTheme.colorScheme.primary
+        selected -> MaterialTheme.colorScheme.surfaceVariant
+        else -> Color.Transparent
+    }
+    val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    Text(
+        text = label,
+        style = MaterialTheme.typography.titleMedium,
+        color = fg,
+        modifier = Modifier
+            .clip(shape)
+            .background(bg)
+            .then(if (selected && !focused) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, shape) else Modifier)
+            .androidx_clickable(interaction, onClick)
+            .padding(horizontal = 20.dp, vertical = 10.dp),
+    )
+}
+
+private fun Modifier.androidx_clickable(interaction: MutableInteractionSource, onClick: () -> Unit): Modifier =
+    this.clickable(interactionSource = interaction, indication = null, onClick = onClick)
 
 @Composable
 private fun CategoryRail(
@@ -124,6 +172,155 @@ private fun CategoryRail(
                 },
             )
         }
+    }
+}
+
+@Composable
+private fun ChannelGrid(
+    channels: List<Channel>,
+    favorites: Set<String>,
+    error: String?,
+    nowTitleFor: (Channel) -> String?,
+    onPlay: (String, String) -> Unit,
+    onToggleFavorite: (Channel) -> Unit,
+) {
+    if (channels.isEmpty()) {
+        CenterMessage(error ?: "No channels here yet.")
+        return
+    }
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(200.dp),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        gridItems(channels, key = { it.id }) { channel ->
+            ChannelCard(
+                channel = channel,
+                favorite = channel.id in favorites,
+                nowTitle = nowTitleFor(channel),
+                onClick = { onPlay(channel.streamUrl, channel.name) },
+                onLongClick = { onToggleFavorite(channel) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun VodGrid(vod: List<com.dionysus.tv.core.model.MediaItem>, onPlay: (String, String) -> Unit) {
+    if (vod.isEmpty()) {
+        CenterMessage("No VOD movies available.")
+        return
+    }
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(160.dp),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        gridItems(vod, key = { it.id }) { item ->
+            MediaCard(
+                item = item,
+                onClick = { item.streamUrl?.let { onPlay(it, item.title) } },
+            )
+        }
+    }
+}
+
+@Composable
+private fun EpgGuide(
+    channels: List<Channel>,
+    upcomingFor: (Channel) -> List<Programme>,
+    onPlay: (String, String) -> Unit,
+) {
+    if (channels.isEmpty()) {
+        CenterMessage("No EPG data. Add an EPG (XMLTV) URL to your playlist in Settings → Live TV.")
+        return
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(top = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        items(channels, key = { it.id }) { channel ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Channel label (also plays the channel).
+                Box(
+                    modifier = Modifier.width(150.dp).padding(end = 12.dp),
+                ) {
+                    Text(
+                        text = channel.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val programmes = upcomingFor(channel)
+                    if (programmes.isEmpty()) {
+                        item {
+                            ProgrammeBlock(
+                                time = "",
+                                title = "No guide data",
+                                isNow = false,
+                                onClick = { onPlay(channel.streamUrl, channel.name) },
+                            )
+                        }
+                    } else {
+                        val now = System.currentTimeMillis()
+                        items(programmes, key = { it.startMs }) { prog ->
+                            ProgrammeBlock(
+                                time = formatClock(prog.startMs),
+                                title = prog.title,
+                                isNow = now in prog.startMs until prog.stopMs,
+                                onClick = { onPlay(channel.streamUrl, "${channel.name} — ${prog.title}") },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProgrammeBlock(time: String, title: String, isNow: Boolean, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val shape = RoundedCornerShape(8.dp)
+    val bg = when {
+        focused -> MaterialTheme.colorScheme.primary
+        isNow -> MaterialTheme.colorScheme.surfaceVariant
+        else -> Color(0xFF1A1A22)
+    }
+    val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    Column(
+        modifier = Modifier
+            .width(200.dp)
+            .clip(shape)
+            .background(bg)
+            .then(if (isNow && !focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape) else Modifier)
+            .androidx_clickable(interaction, onClick)
+            .padding(12.dp),
+    ) {
+        Row {
+            if (time.isNotBlank()) {
+                Text(time, style = MaterialTheme.typography.labelMedium, color = fg)
+                Text("  ", style = MaterialTheme.typography.labelMedium, color = fg)
+            }
+            if (isNow) {
+                Text("● NOW", style = MaterialTheme.typography.labelMedium, color = Color(0xFFFF5252))
+            }
+        }
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            color = fg,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -236,3 +433,6 @@ private fun CenterMessage(message: String) {
         )
     }
 }
+
+private val clockFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+private fun formatClock(ms: Long): String = clockFormat.format(Date(ms))

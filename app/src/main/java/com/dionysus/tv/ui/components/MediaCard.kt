@@ -43,6 +43,7 @@ fun MediaCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     showTypeBadge: Boolean = false,
+    showSourceBadge: Boolean = false,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
@@ -80,8 +81,29 @@ fun MediaCard(
                     .padding(horizontal = 8.dp, vertical = 3.dp),
             )
         }
+        if (showSourceBadge) {
+            val src = item.source
+            Text(
+                text = src.label,
+                style = MaterialTheme.typography.labelMedium,
+                color = androidx.compose.ui.graphics.Color.White,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(6.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(sourceColor(src))
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+            )
+        }
     }
 }
+
+private fun sourceColor(source: com.dionysus.tv.core.model.MediaSource): androidx.compose.ui.graphics.Color =
+    when (source) {
+        com.dionysus.tv.core.model.MediaSource.LIVE_TV -> androidx.compose.ui.graphics.Color(0xE6D32F2F)
+        com.dionysus.tv.core.model.MediaSource.VOD -> androidx.compose.ui.graphics.Color(0xE67B1FA2)
+        com.dionysus.tv.core.model.MediaSource.DIONYSUS -> androidx.compose.ui.graphics.Color(0xE60277BD)
+    }
 
 @Composable
 private fun PosterPlaceholder(title: String) {

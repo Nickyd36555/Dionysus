@@ -4,6 +4,17 @@ package com.dionysus.tv.core.model
 enum class MediaType { MOVIE, TV_SHOW }
 
 /**
+ * Where a catalog entry comes from. Drives the badge shown in search and whether
+ * selecting it opens the detail/scrape flow (DIONYSUS) or plays directly (VOD,
+ * LIVE_TV, which already carry a stream URL).
+ */
+enum class MediaSource(val label: String) {
+    DIONYSUS("Dionysus"),
+    VOD("VOD"),
+    LIVE_TV("Live TV"),
+}
+
+/**
  * A single browsable catalog entry (movie or show). Metadata comes from the
  * configured metadata provider (TMDB by default); playable streams are resolved
  * separately via [com.dionysus.tv.data.scraper.Scraper]s and debrid services.
@@ -22,6 +33,10 @@ data class MediaItem(
     /** External ids used by scrapers to find matching streams. */
     val tmdbId: Int? = null,
     val imdbId: String? = null,
+    /** Origin of this entry; controls badges and open behavior. */
+    val source: MediaSource = MediaSource.DIONYSUS,
+    /** Directly playable URL for VOD/live entries (null for scraped catalog items). */
+    val streamUrl: String? = null,
 )
 
 /**

@@ -52,7 +52,10 @@ fun DionysusApp(navController: NavHostController = rememberNavController()) {
 
         composable(Routes.SEARCH) {
             TopLevel(navController) {
-                SearchScreen(onOpenDetail = { navController.navigate(Routes.detail(it)) })
+                SearchScreen(
+                    onOpenDetail = { navController.navigate(Routes.detail(it)) },
+                    onPlay = { url, title -> navController.navigate(Routes.player(url, title)) },
+                )
             }
         }
 

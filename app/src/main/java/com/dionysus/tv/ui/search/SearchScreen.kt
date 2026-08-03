@@ -36,10 +36,17 @@ import androidx.tv.material3.Text
 @Composable
 fun SearchScreen(
     onOpenDetail: (String) -> Unit,
+    onPlay: (url: String, title: String) -> Unit,
     viewModel: SearchViewModel = hiltViewModel(),
 ) {
     val query by viewModel.query.collectAsStateWithLifecycle()
     val results by viewModel.results.collectAsStateWithLifecycle()
+
+    // VOD/Live items play directly; catalog items open their detail page.
+    val open: (MediaItem) -> Unit = { item ->
+        val url = item.streamUrl
+        if (url != null) onPlay(url, item.title) else onOpenDetail(item.id)
+    }
 
     Column(
         modifier = Modifier
@@ -66,8 +73,8 @@ fun SearchScreen(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
-                section("Movies", movies, onOpenDetail)
-                section("TV Shows", shows, onOpenDetail)
+                section("Movies", movies, open)
+                section("TV Shows", shows, open)
             }
         }
     }
@@ -77,7 +84,7 @@ fun SearchScreen(
 private fun LazyGridScope.section(
     title: String,
     items: List<MediaItem>,
-    onOpenDetail: (String) -> Unit,
+    onOpen: (MediaItem) -> Unit,
 ) {
     if (items.isEmpty()) return
     item(span = { GridItemSpan(maxLineSpan) }) {
@@ -89,7 +96,7 @@ private fun LazyGridScope.section(
         )
     }
     items(items, key = { it.id }) { item ->
-        MediaCard(item = item, onClick = { onOpenDetail(item.id) })
+        MediaCard(item = item, onClick = { onOpen(item) }, showSourceBadge = true)
     }
 }
 

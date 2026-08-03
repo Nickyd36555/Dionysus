@@ -7,6 +7,9 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.dionysus.tv.core.model.DataResult
+import com.dionysus.tv.core.model.MediaItem
+import com.dionysus.tv.core.model.MediaSource
+import com.dionysus.tv.core.model.MediaType
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -42,6 +45,13 @@ class IptvRepository @Inject constructor(
     private val json: Json,
 ) {
     private val listSerializer = ListSerializer(StoredPlaylist.serializer())
+
+    // In-memory caches so unified search and the guide don't re-hit the network
+    // on every keystroke. Invalidated whenever playlists change.
+    private var cachedChannels: List<Channel> = emptyList()
+    private var cachedVod: List<MediaItem> = emptyList()
+    private var cachedEpg: Map<String, List<Programme>> = emptyMap()
+    private var loaded = false
 
     val playlists: Flow<List<StoredPlaylist>> = context.iptvStore.data.map { prefs ->
         decode(prefs[KEY_PLAYLISTS])
@@ -94,6 +104,15 @@ class IptvRepository @Inject constructor(
     suspend fun remove(id: String) {
         val current = decode(context.iptvStore.data.first()[KEY_PLAYLISTS])
         writePlaylists(current.filterNot { it.id == id })
+        invalidateCache()
+    }
+
+    /** Drop cached channels/VOD/EPG so the next load re-fetches. */
+    fun invalidateCache() {
+        loaded = false
+        cachedChannels = emptyList()
+        cachedVod = emptyList()
+        cachedEpg = emptyMap()
     }
 
     suspend fun toggleFavorite(channelId: String) {
@@ -104,14 +123,103 @@ class IptvRepository @Inject constructor(
         }
     }
 
-    /** Load channels from every configured playlist, concurrently. */
+    /** Load channels from every configured playlist, concurrently (cached). */
     suspend fun loadChannels(): DataResult<List<Channel>> = DataResult.catching {
-        val defs = playlists.first()
-        if (defs.isEmpty()) return@catching emptyList()
-        coroutineScope {
-            defs.map { pl -> async { runCatching { channelsFor(pl) }.getOrElse { emptyList() } } }
-                .awaitAll()
-                .flatten()
+        ensureLoaded()
+        cachedChannels
+    }
+
+    /** Load VOD (movies) from every Xtream playlist, as playable [MediaItem]s. */
+    suspend fun loadVod(): DataResult<List<MediaItem>> = DataResult.catching {
+        ensureLoaded()
+        cachedVod
+    }
+
+    /**
+     * Unified content search across VOD and Live TV (EPG programme titles).
+     * Each result is tagged with its [MediaSource] and carries a direct stream
+     * URL so it plays without scraping. Catalog (Dionysus) results come from the
+     * metadata repository separately.
+     */
+    suspend fun searchContent(query: String): List<MediaItem> {
+        val q = query.trim().lowercase()
+        if (q.length < 2) return emptyList()
+        ensureLoaded()
+        val results = ArrayList<MediaItem>()
+        // VOD movies whose title matches.
+        cachedVod.filter { it.title.lowercase().contains(q) }.take(30).forEach { results.add(it) }
+        // Things airing on Live TV: match EPG programme titles, resolve the channel.
+        val channelsByEpg = cachedChannels.filter { it.epgId != null }.associateBy { it.epgId }
+        cachedEpg.forEach { (epgId, programmes) ->
+            val channel = channelsByEpg[epgId] ?: return@forEach
+            programmes.filter { it.title.lowercase().contains(q) }
+                .distinctBy { it.title }
+                .take(2)
+                .forEach { prog ->
+                    results.add(
+                        MediaItem(
+                            id = "livetv:${channel.id}:${prog.startMs}",
+                            type = MediaType.MOVIE,
+                            title = prog.title,
+                            overview = prog.description.ifBlank { "On ${channel.name}" },
+                            posterUrl = channel.logo,
+                            source = MediaSource.LIVE_TV,
+                            streamUrl = channel.streamUrl,
+                        ),
+                    )
+                }
+        }
+        return results
+    }
+
+    /** Populate the in-memory caches once (channels, VOD, EPG). */
+    private suspend fun ensureLoaded() {
+        if (loaded) return
+        val defs = runCatching { playlists.first() }.getOrDefault(emptyList())
+        if (defs.isEmpty()) { loaded = true; return }
+        cachedChannels = runCatching { fetchAllChannels(defs) }.getOrDefault(emptyList())
+        cachedVod = runCatching { fetchAllVod(defs) }.getOrDefault(emptyList())
+        cachedEpg = runCatching { loadEpg() }.getOrDefault(emptyMap())
+        loaded = true
+    }
+
+    private suspend fun fetchAllChannels(defs: List<StoredPlaylist>): List<Channel> = coroutineScope {
+        defs.map { pl -> async { runCatching { channelsFor(pl) }.getOrElse { emptyList() } } }
+            .awaitAll()
+            .flatten()
+    }
+
+    private suspend fun fetchAllVod(defs: List<StoredPlaylist>): List<MediaItem> = coroutineScope {
+        defs.filter { it.kind == PlaylistKind.XTREAM }
+            .map { pl -> async { runCatching { loadXtreamVod(pl) }.getOrElse { emptyList() } } }
+            .awaitAll()
+            .flatten()
+    }
+
+    private suspend fun loadXtreamVod(pl: StoredPlaylist): List<MediaItem> {
+        val catsUrl = "${pl.host}/player_api.php?username=${pl.username}&password=${pl.password}&action=get_vod_categories"
+        val streamsUrl = "${pl.host}/player_api.php?username=${pl.username}&password=${pl.password}&action=get_vod_streams"
+        val categories = runCatching {
+            (json.parseToJsonElement(fetchText(catsUrl)) as? JsonArray)?.associate {
+                val o = it as JsonObject
+                o.str("category_id") to o.str("category_name")
+            }.orEmpty()
+        }.getOrDefault(emptyMap())
+
+        val streams = json.parseToJsonElement(fetchText(streamsUrl)) as? JsonArray ?: return emptyList()
+        return streams.mapNotNull { el ->
+            val o = el as? JsonObject ?: return@mapNotNull null
+            val streamId = o.str("stream_id").ifBlank { return@mapNotNull null }
+            val ext = o.str("container_extension").ifBlank { "mp4" }
+            MediaItem(
+                id = "vod:${pl.id}:$streamId",
+                type = MediaType.MOVIE,
+                title = o.str("name").ifBlank { "Movie $streamId" },
+                posterUrl = o.str("stream_icon").takeIf { it.isNotBlank() },
+                rating = o.str("rating").toDoubleOrNull(),
+                source = MediaSource.VOD,
+                streamUrl = "${pl.host}/movie/${pl.username}/${pl.password}/$streamId.$ext",
+            )
         }
     }
 
@@ -182,6 +290,7 @@ class IptvRepository @Inject constructor(
         val current = decode(context.iptvStore.data.first()[KEY_PLAYLISTS]).toMutableList()
         current.add(playlist)
         writePlaylists(current)
+        invalidateCache()
     }
 
     private suspend fun writePlaylists(list: List<StoredPlaylist>) {

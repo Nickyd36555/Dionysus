@@ -3,6 +3,7 @@ package com.dionysus.tv.ui.livetv
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dionysus.tv.core.model.DataResult
+import com.dionysus.tv.core.model.MediaItem
 import com.dionysus.tv.data.iptv.Channel
 import com.dionysus.tv.data.iptv.IptvRepository
 import com.dionysus.tv.data.iptv.NowNext
@@ -21,24 +22,35 @@ import javax.inject.Inject
 
 const val CATEGORY_FAVORITES = "★ Favorites"
 const val CATEGORY_ALL = "All Channels"
+const val CATEGORY_VOD = "🎬 VOD Movies"
+
+enum class LiveTvMode { CHANNELS, GUIDE }
 
 data class LiveTvUiState(
     val hasPlaylists: Boolean = true,
     val isLoading: Boolean = true,
+    val mode: LiveTvMode = LiveTvMode.CHANNELS,
     val categories: List<String> = emptyList(),
     val selectedCategory: String = CATEGORY_ALL,
     val channels: List<Channel> = emptyList(),
+    val vod: List<MediaItem> = emptyList(),
     val favorites: Set<String> = emptySet(),
     val epg: Map<String, List<Programme>> = emptyMap(),
     val error: String? = null,
 ) {
+    val showingVod: Boolean get() = selectedCategory == CATEGORY_VOD
+
     /** Channels shown for the current category. */
     val visibleChannels: List<Channel>
         get() = when (selectedCategory) {
             CATEGORY_FAVORITES -> channels.filter { it.id in favorites }
-            CATEGORY_ALL -> channels
+            CATEGORY_ALL, CATEGORY_VOD -> channels
             else -> channels.filter { it.group == selectedCategory }
         }
+
+    /** Channels that have EPG data, used to populate the guide. */
+    val guideChannels: List<Channel>
+        get() = channels.filter { it.epgId != null && epg[it.epgId].orEmpty().isNotEmpty() }
 }
 
 @HiltViewModel
@@ -60,6 +72,7 @@ class LiveTvViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true, error = null)
             val hasPlaylists = runCatching { iptv.playlists.first().isNotEmpty() }.getOrDefault(false)
+            val vod = iptv.loadVod().getOrNull().orEmpty()
             when (val result = iptv.loadChannels()) {
                 is DataResult.Success -> {
                     val channels = result.data
@@ -68,22 +81,37 @@ class LiveTvViewModel @Inject constructor(
                         hasPlaylists = hasPlaylists,
                         isLoading = false,
                         channels = channels,
+                        vod = vod,
                         categories = buildList {
                             add(CATEGORY_FAVORITES)
                             add(CATEGORY_ALL)
+                            if (vod.isNotEmpty()) add(CATEGORY_VOD)
                             addAll(groups)
                         },
-                        error = if (channels.isEmpty() && hasPlaylists) "No channels found in your playlists." else null,
+                        error = if (channels.isEmpty() && vod.isEmpty() && hasPlaylists) "No channels found in your playlists." else null,
                     )
                 }
                 is DataResult.Error -> _state.value = _state.value.copy(
                     isLoading = false,
                     hasPlaylists = hasPlaylists,
+                    vod = vod,
                     error = result.message,
                 )
             }
             loadEpg()
         }
+    }
+
+    fun setMode(mode: LiveTvMode) {
+        _state.value = _state.value.copy(mode = mode)
+    }
+
+    /** Upcoming programmes for a channel (now onward), for the guide rows. */
+    fun upcoming(channel: Channel, limit: Int = 12): List<Programme> {
+        val epgId = channel.epgId ?: return emptyList()
+        val list = _state.value.epg[epgId] ?: return emptyList()
+        val now = System.currentTimeMillis()
+        return list.filter { it.stopMs > now }.take(limit)
     }
 
     private fun loadEpg() {
