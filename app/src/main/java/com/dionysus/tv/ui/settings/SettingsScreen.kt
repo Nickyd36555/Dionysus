@@ -326,13 +326,32 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(0.85f).padding(top = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                val currentTzLabel = TIMEZONES.firstOrNull { it.first == state.guideTimeZone }?.second
+                    ?: "Device default"
                 Text(
-                    "Guide time offset: ${formatOffset(state.epgOffsetMinutes)}",
+                    "Guide timezone: $currentTzLabel",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    "If the guide times are shifted from your local time, nudge them here (e.g. −3h for EST→PST). Times otherwise follow your device's timezone.",
+                    "Pick the timezone the guide should show times in. Choose your own zone (e.g. Pacific) if the device clock is set to a different one.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                AppButton(onClick = {
+                    val idx = TIMEZONES.indexOfFirst { it.first == state.guideTimeZone }
+                    val next = TIMEZONES[(idx + 1).mod(TIMEZONES.size)]
+                    viewModel.setGuideTimeZone(next.first)
+                }) { Text("Timezone: $currentTzLabel") }
+
+                Text(
+                    "Fine-tune offset: ${formatOffset(state.epgOffsetMinutes)}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                Text(
+                    "Only needed if a provider's guide is still shifted after setting the timezone.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -470,6 +489,21 @@ fun SettingsScreen(
         }
     }
 }
+
+/** Curated timezone choices for the guide (id to label). "" = device default. */
+private val TIMEZONES: List<Pair<String, String>> = listOf(
+    "" to "Device default",
+    "America/Los_Angeles" to "Pacific (PT)",
+    "America/Denver" to "Mountain (MT)",
+    "America/Phoenix" to "Arizona (no DST)",
+    "America/Chicago" to "Central (CT)",
+    "America/New_York" to "Eastern (ET)",
+    "America/Anchorage" to "Alaska",
+    "Pacific/Honolulu" to "Hawaii",
+    "UTC" to "UTC",
+    "Europe/London" to "UK (GMT/BST)",
+    "Europe/Paris" to "Central Europe",
+)
 
 /** Human-readable guide time offset, e.g. "0", "+1h 30m", "−3h". */
 private fun formatOffset(minutes: Int): String {

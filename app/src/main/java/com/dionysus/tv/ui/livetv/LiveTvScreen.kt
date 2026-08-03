@@ -142,6 +142,10 @@ private fun LiveView(
         androidx.compose.runtime.mutableStateOf<Channel?>(null)
     }
     val preview = previewChannel ?: channels.firstOrNull()
+    val zone = androidx.compose.runtime.remember(state.guideTimeZone) {
+        if (state.guideTimeZone.isBlank()) java.util.TimeZone.getDefault()
+        else java.util.TimeZone.getTimeZone(state.guideTimeZone)
+    }
 
     Row(Modifier.fillMaxSize().padding(top = 12.dp)) {
         CategoryRail(
@@ -155,12 +159,13 @@ private fun LiveView(
         )
         Column(Modifier.fillMaxSize().padding(start = 16.dp)) {
             if (preview != null) {
-                NowNextPreview(channel = preview, nowNext = viewModel.nowNext(preview))
+                NowNextPreview(channel = preview, nowNext = viewModel.nowNext(preview), zone = zone)
             }
             EpgGuide(
                 channels = channels,
                 favorites = state.favorites,
                 programmesFor = viewModel::programmes,
+                zone = zone,
                 onPlay = onPlay,
                 onFocusChannel = { previewChannel = it; viewModel.prefetchGuide(listOf(it)) },
                 onToggleFavorite = viewModel::toggleFavorite,
@@ -170,7 +175,7 @@ private fun LiveView(
 }
 
 @Composable
-private fun NowNextPreview(channel: Channel, nowNext: com.dionysus.tv.data.iptv.NowNext) {
+private fun NowNextPreview(channel: Channel, nowNext: com.dionysus.tv.data.iptv.NowNext, zone: java.util.TimeZone) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -207,7 +212,7 @@ private fun NowNextPreview(channel: Channel, nowNext: com.dionysus.tv.data.iptv.
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    "${formatClock(now.startMs)}–${formatClock(now.stopMs)}",
+                    "${formatClock(now.startMs, zone)}–${formatClock(now.stopMs, zone)}",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -225,7 +230,7 @@ private fun NowNextPreview(channel: Channel, nowNext: com.dionysus.tv.data.iptv.
             }
             nowNext.next?.let { next ->
                 Text(
-                    "Up next: ${next.title} · ${formatClock(next.startMs)}",
+                    "Up next: ${next.title} · ${formatClock(next.startMs, zone)}",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -486,6 +491,7 @@ private fun EpgGuide(
     channels: List<Channel>,
     favorites: Set<String>,
     programmesFor: (Channel) -> List<Programme>,
+    zone: java.util.TimeZone,
     onPlay: (String, String) -> Unit,
     onFocusChannel: (Channel) -> Unit,
     onToggleFavorite: (Channel) -> Unit,
@@ -509,7 +515,7 @@ private fun EpgGuide(
         Row {
             Box(Modifier.width(CHANNEL_COL_WIDTH)) {
                 Text(
-                    formatDay(now),
+                    formatDay(now, zone),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 8.dp),
@@ -518,7 +524,7 @@ private fun EpgGuide(
             Row(Modifier.horizontalScroll(scroll)) {
                 repeat(totalSlots) { i ->
                     Text(
-                        text = formatClock(timelineStart + i * slotMs),
+                        text = formatClock(timelineStart + i * slotMs, zone),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.width((SLOT_MIN * PX_PER_MIN).dp).padding(vertical = 8.dp),
@@ -556,7 +562,7 @@ private fun EpgGuide(
                             val widthMin = ((prog.stopMs - start) / 60_000L).toInt().coerceAtLeast(6)
                             ProgrammeBlock(
                                 widthDp = (widthMin * PX_PER_MIN).dp,
-                                time = "${formatClock(prog.startMs)}–${formatClock(prog.stopMs)}",
+                                time = "${formatClock(prog.startMs, zone)}–${formatClock(prog.stopMs, zone)}",
                                 title = prog.title,
                                 isNow = now in prog.startMs until prog.stopMs,
                                 onClick = { onPlay(channel.streamUrl, "${channel.name} — ${prog.title}") },
@@ -809,7 +815,11 @@ private fun CenterMessage(message: String) {
     }
 }
 
-private val clockFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
-private val dayFormat = SimpleDateFormat("EEE, d MMM", Locale.getDefault())
-private fun formatClock(ms: Long): String = clockFormat.format(Date(ms))
-private fun formatDay(ms: Long): String = dayFormat.format(Date(ms))
+// Formatters cached per timezone so the guide can render in the user's chosen zone.
+private val fmtCache = HashMap<String, SimpleDateFormat>()
+private fun clockOf(zone: java.util.TimeZone): SimpleDateFormat =
+    fmtCache.getOrPut("c|${zone.id}") { SimpleDateFormat("h:mm a", Locale.getDefault()).apply { timeZone = zone } }
+private fun dayOf(zone: java.util.TimeZone): SimpleDateFormat =
+    fmtCache.getOrPut("d|${zone.id}") { SimpleDateFormat("EEE, d MMM", Locale.getDefault()).apply { timeZone = zone } }
+private fun formatClock(ms: Long, zone: java.util.TimeZone): String = clockOf(zone).format(Date(ms))
+private fun formatDay(ms: Long, zone: java.util.TimeZone): String = dayOf(zone).format(Date(ms))

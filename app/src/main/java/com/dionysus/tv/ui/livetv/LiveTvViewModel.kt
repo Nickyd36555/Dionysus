@@ -60,6 +60,7 @@ data class LiveTvUiState(
     val shortEpg: Map<String, List<Programme>> = emptyMap(),
     val epgLoading: Boolean = false,
     val epgOffsetMinutes: Int = 0,
+    val guideTimeZone: String = "",
     val error: String? = null,
 ) {
     private fun visibleGroupChannels() =
@@ -142,6 +143,9 @@ class LiveTvViewModel @Inject constructor(
             .launchIn(viewModelScope)
         settings.epgOffsetMinutes
             .onEach { off -> _state.value = _state.value.copy(epgOffsetMinutes = off) }
+            .launchIn(viewModelScope)
+        settings.guideTimeZone
+            .onEach { tz -> _state.value = _state.value.copy(guideTimeZone = tz) }
             .launchIn(viewModelScope)
         refresh()
     }
