@@ -48,6 +48,13 @@ fun DionysusApp(navController: NavHostController = rememberNavController()) {
             TopLevel(navController) {
                 LiveTvScreen(
                     onOpenLive = { navController.navigate(Routes.LIVE_PLAYER) },
+                    onOpenVod = {
+                        navController.navigate(Routes.MOVIES) {
+                            popUpTo(Routes.HOME) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
                 )
             }
         }

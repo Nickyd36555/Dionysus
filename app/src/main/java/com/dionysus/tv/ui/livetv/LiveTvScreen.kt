@@ -5,6 +5,7 @@
 
 package com.dionysus.tv.ui.livetv
 
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.background
@@ -41,8 +42,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -59,9 +62,14 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.dionysus.tv.data.iptv.Channel
@@ -71,6 +79,11 @@ import com.dionysus.tv.ui.components.MediaCard
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import kotlinx.coroutines.delay
+import org.videolan.libvlc.LibVLC
+import org.videolan.libvlc.Media
+import org.videolan.libvlc.MediaPlayer
+import org.videolan.libvlc.util.VLCVideoLayout
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -78,6 +91,7 @@ import java.util.Locale
 @Composable
 fun LiveTvScreen(
     onOpenLive: () -> Unit,
+    onOpenVod: () -> Unit = {},
     viewModel: LiveTvViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -114,6 +128,7 @@ fun LiveTvScreen(
                 state = state,
                 viewModel = viewModel,
                 onPlayChannel = onPlayChannel,
+                onOpenVod = onOpenVod,
             )
         }
     }
@@ -171,12 +186,13 @@ private fun EpgUpdatingPill() {
     }
 }
 
-/** Combined Live TV view: category rail + now/next preview + timeline guide. */
+/** Combined Live TV view: category rail + live preview + timeline guide. */
 @Composable
 private fun LiveView(
     state: LiveTvUiState,
     viewModel: LiveTvViewModel,
     onPlayChannel: (Channel) -> Unit,
+    onOpenVod: () -> Unit = {},
 ) {
     val channels = state.visibleChannels
     var previewChannel by androidx.compose.runtime.remember(state.selectedCategory) {
@@ -186,6 +202,45 @@ private fun LiveView(
     val zone = androidx.compose.runtime.remember(state.guideTimeZone) {
         if (state.guideTimeZone.isBlank()) java.util.TimeZone.getDefault()
         else java.util.TimeZone.getTimeZone(state.guideTimeZone)
+    }
+
+    // Live preview player — plays whatever channel is currently focused, like
+    // TiViMate's picture-in-guide. One LibVLC instance for the whole screen; the
+    // stream is (re)loaded, debounced, whenever the focused channel changes.
+    val context = LocalContext.current
+    val libVlc = remember { LibVLC(context, arrayListOf("--network-caching=1500", "--live-caching=1500")) }
+    val previewPlayer = remember { MediaPlayer(libVlc) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var resumeTick by remember { mutableIntStateOf(0) }
+    var isResumed by remember { mutableStateOf(true) }
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
+                    isResumed = false
+                    runCatching { previewPlayer.stop() }
+                }
+                Lifecycle.Event.ON_RESUME -> { isResumed = true; resumeTick++ }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(obs)
+            runCatching { previewPlayer.stop(); previewPlayer.detachViews(); previewPlayer.release(); libVlc.release() }
+        }
+    }
+    // Debounced (re)load so arrowing quickly through channels doesn't thrash.
+    LaunchedEffect(preview?.id, isResumed, resumeTick) {
+        val ch = preview
+        if (ch == null || !isResumed) return@LaunchedEffect
+        delay(700)
+        runCatching {
+            val media = Media(libVlc, Uri.parse(ch.streamUrl)).apply { setHWDecoderEnabled(true, false) }
+            previewPlayer.media = media
+            media.release()
+            previewPlayer.play()
+        }
     }
 
     // Once a category (e.g. Movies) is picked, collapse the rail so the guide
@@ -205,6 +260,7 @@ private fun LiveView(
         if (showCategories) {
             CategoryRail(
                 state = state,
+                onOpenVod = if (state.hasVod) onOpenVod else null,
                 onRow = { row ->
                     viewModel.onRowSelected(row)
                     if (!row.isGroup) showCategories = false
@@ -221,7 +277,12 @@ private fun LiveView(
         }
         Column(Modifier.fillMaxSize().padding(start = if (showCategories) 16.dp else 0.dp)) {
             if (preview != null) {
-                NowNextPreview(channel = preview, nowNext = viewModel.nowNext(preview), zone = zone)
+                NowNextPreview(
+                    channel = preview,
+                    nowNext = viewModel.nowNext(preview),
+                    zone = zone,
+                    player = previewPlayer,
+                )
             }
             EpgGuide(
                 channels = channels,
@@ -231,6 +292,7 @@ private fun LiveView(
                 now = viewModel.nowMs(),
                 restoreFocusId = viewModel.lastFocusedChannelId,
                 firstChannelFocus = guideFocus,
+                scrollResetKey = state.selectedCategory,
                 onPlayChannel = onPlayChannel,
                 onFocusChannel = { previewChannel = it; viewModel.prefetchGuide(listOf(it)) },
                 onToggleFavorite = viewModel::toggleFavorite,
@@ -241,29 +303,49 @@ private fun LiveView(
 }
 
 @Composable
-private fun NowNextPreview(channel: Channel, nowNext: com.dionysus.tv.data.iptv.NowNext, zone: java.util.TimeZone) {
+private fun NowNextPreview(
+    channel: Channel,
+    nowNext: com.dionysus.tv.data.iptv.NowNext,
+    zone: java.util.TimeZone,
+    player: MediaPlayer? = null,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 12.dp)
+            .padding(bottom = 10.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(Color(0xFF14141C))
-            .padding(16.dp),
+            .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            modifier = Modifier.size(120.dp, 68.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF0B0B10)),
+            modifier = Modifier.size(200.dp, 112.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF0B0B10)),
             contentAlignment = Alignment.Center,
         ) {
+            // Channel logo underneath acts as a placeholder until the stream draws.
             if (channel.logo != null) {
                 AsyncImage(
                     model = channel.logo,
                     contentDescription = channel.name,
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize().padding(8.dp),
+                    modifier = Modifier.fillMaxSize().padding(20.dp),
                 )
             } else {
                 Text(channel.name.take(2).uppercase(), color = MaterialTheme.colorScheme.primary)
+            }
+            if (player != null) {
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { ctx ->
+                        VLCVideoLayout(ctx).also { layout ->
+                            layout.isFocusable = false
+                            layout.isFocusableInTouchMode = false
+                            layout.descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                            runCatching { player.detachViews() }
+                            runCatching { player.attachViews(layout, null, false, false) }
+                        }
+                    },
+                )
             }
         }
         Column(Modifier.weight(1f).padding(start = 16.dp)) {
@@ -374,12 +456,26 @@ private fun CategoryRail(
     onHideGroup: (String) -> Unit,
     onToggleHidden: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenVod: (() -> Unit)? = null,
 ) {
     val drilled = state.selectedGroup != null
     LazyColumn(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        if (onOpenVod != null && !drilled) {
+            item(key = "vod") {
+                CategoryRowItem(
+                    label = "🎬  Movies (VOD)",
+                    count = null,
+                    selected = false,
+                    isGroup = true,
+                    hidden = false,
+                    onClick = onOpenVod,
+                    onLongClick = null,
+                )
+            }
+        }
         if (drilled) {
             item(key = "back") {
                 CategoryRowItem(
@@ -550,7 +646,7 @@ internal fun VodGrid(vod: List<com.dionysus.tv.core.model.MediaItem>, onPlay: (S
 private const val PX_PER_MIN = 5           // dp of width per minute of programme time
 private const val SLOT_MIN = 30            // ruler tick every 30 minutes
 private val CHANNEL_COL_WIDTH = 220.dp
-private val GUIDE_ROW_HEIGHT = 76.dp
+private val GUIDE_ROW_HEIGHT = 56.dp
 
 @Composable
 private fun EpgGuide(
@@ -561,6 +657,7 @@ private fun EpgGuide(
     now: Long,
     restoreFocusId: String?,
     firstChannelFocus: FocusRequester? = null,
+    scrollResetKey: Any? = null,
     onPlayChannel: (Channel) -> Unit,
     onFocusChannel: (Channel) -> Unit,
     onToggleFavorite: (Channel) -> Unit,
@@ -572,6 +669,7 @@ private fun EpgGuide(
     }
     val slotMs = SLOT_MIN * 60_000L
     val listState = rememberLazyListState()
+    val scroll = rememberScrollState()
     val restoreFocus = remember { FocusRequester() }
     // Return focus to the channel you were just watching (not the nav rail).
     LaunchedEffect(restoreFocusId, channels.size) {
@@ -581,12 +679,16 @@ private fun EpgGuide(
             runCatching { restoreFocus.requestFocus() }
         }
     }
+    // Picking a new category should start the guide at the very top/left.
+    LaunchedEffect(scrollResetKey) {
+        runCatching { listState.scrollToItem(0) }
+        runCatching { scroll.scrollTo(0) }
+    }
     // Start the timeline at the current half-hour so the on-now show is leftmost
     // (fully-past programmes are dropped), matching how TiViMate lays it out.
     val timelineStart = (now / slotMs) * slotMs
     val maxStop = channels.maxOf { ch -> programmesFor(ch).maxOfOrNull { it.stopMs } ?: (now + 3 * 3_600_000L) }
     val totalSlots = (((maxStop - timelineStart) / slotMs).toInt() + 1).coerceIn(6, 48)
-    val scroll = rememberScrollState()
 
     Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().padding(top = 12.dp)) {
@@ -612,7 +714,7 @@ private fun EpgGuide(
             }
         }
 
-        LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             itemsIndexed(channels, key = { _, ch -> ch.id }) { i, channel ->
                 Row(
                     modifier = Modifier.height(GUIDE_ROW_HEIGHT),
@@ -747,7 +849,7 @@ private fun ChannelLabel(
             channel.name,
             style = MaterialTheme.typography.titleSmall,
             color = fg,
-            maxLines = 2,
+            maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
