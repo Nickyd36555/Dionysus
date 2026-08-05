@@ -79,20 +79,11 @@ fun LiveTvPlayerScreen(
     val rootFocus = remember { FocusRequester() }
     val listFocus = remember { FocusRequester() }
 
+    // Quality (deinterlace/post-processing) is scaled to the device; hardware
+    // decode with software fallback is always on. See PlaybackTuning.
+    val tier = remember { com.dionysus.tv.player.PlaybackTuning.tier(context) }
     val libVlc = remember {
-        LibVLC(
-            context,
-            arrayListOf(
-                "--network-caching=3000",
-                "--live-caching=3000",
-                "--no-drop-late-frames",
-                "--no-skip-frames",
-                "--no-mediacodec-dr",
-                "--no-omxil-dr",
-                "--audio-time-stretch",
-                "--audio-resampler=soxr",   // high-quality audio resampling
-            ),
-        )
+        LibVLC(context, com.dionysus.tv.player.PlaybackTuning.libVlcOptions(tier, live = true))
     }
     val player = remember { MediaPlayer(libVlc) }
 

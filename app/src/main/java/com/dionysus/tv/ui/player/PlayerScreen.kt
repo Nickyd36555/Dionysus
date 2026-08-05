@@ -101,21 +101,10 @@ fun PlayerScreen(
     // AAC/AC3/E-AC3 "Dolby Digital+"/DTS/DTS-HD/TrueHD/FLAC/Opus audio), so
     // anything that won't hardware-decode still plays in software. HW decode is
     // enabled per-media (setHWDecoderEnabled) with an automatic software fallback.
+    // Post-processing/deinterlace quality is scaled to what the device can handle.
+    val tier = remember { com.dionysus.tv.player.PlaybackTuning.tier(context) }
     val libVlc = remember {
-        LibVLC(
-            context,
-            arrayListOf(
-                "--network-caching=3000",
-                "--file-caching=3000",
-                "--live-caching=3000",
-                "--no-drop-late-frames",
-                "--no-skip-frames",
-                "--no-mediacodec-dr",
-                "--no-omxil-dr",
-                "--audio-time-stretch",
-                "--audio-resampler=soxr",   // high-quality audio resampling
-            ),
-        )
+        LibVLC(context, com.dionysus.tv.player.PlaybackTuning.libVlcOptions(tier, live = false))
     }
     val player = remember { MediaPlayer(libVlc) }
 
