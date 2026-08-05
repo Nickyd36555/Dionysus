@@ -191,10 +191,15 @@ private fun LiveView(
         else java.util.TimeZone.getTimeZone(state.guideTimeZone)
     }
 
+    // Coming back from a full-screen channel should land on the guide with the
+    // category menu closed (staying where you were), not pop the menu open again.
+    // Only pressing Back from the guide re-opens the menu.
+    val returningToGuide = remember { viewModel.consumeReturnToGuide() }
+
     // Once a category (e.g. Movies) is picked, collapse the rail so the guide
     // spans the full width — like TiViMate. Reopen with Back or by pressing Left
     // on the leftmost channel.
-    var showCategories by remember { mutableStateOf(true) }
+    var showCategories by remember { mutableStateOf(!returningToGuide) }
     val railFocus = remember { FocusRequester() }
     val guideFocus = remember { FocusRequester() }
 

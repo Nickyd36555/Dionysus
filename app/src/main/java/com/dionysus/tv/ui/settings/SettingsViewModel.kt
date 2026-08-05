@@ -52,6 +52,8 @@ data class SettingsUiState(
     val epgOffsetMinutes: Int = 0,
     val guideTimeZone: String = "",
     val autoGuideTime: Boolean = true,
+    val liveDefaultCategory: String = "",
+    val liveCategories: List<String> = emptyList(),
     val addons: List<Addon> = emptyList(),
     val addonUrlInput: String = "",
     val syncCode: String? = null,
@@ -258,6 +260,10 @@ class SettingsViewModel @Inject constructor(
             epgOffsetMinutes = settings.currentEpgOffsetMinutes(),
             guideTimeZone = settings.currentGuideTimeZone(),
             autoGuideTime = settings.currentAutoGuideTime(),
+            liveDefaultCategory = settings.currentLiveDefaultCategory(),
+            liveCategories = runCatching {
+                iptv.cachedContentOrDisk().first.map { it.group }.filter { it.isNotBlank() }.distinct().sorted()
+            }.getOrDefault(emptyList()),
             premiumizeKey = settings.currentPremiumizeApiKey().orEmpty(),
             orionKey = settings.currentOrionApiKey().orEmpty(),
             torrentioUrl = settings.torrentioBaseUrl.first(),
@@ -357,6 +363,11 @@ class SettingsViewModel @Inject constructor(
     fun setAutoGuideTime(enabled: Boolean) {
         _state.value = _state.value.copy(autoGuideTime = enabled)
         viewModelScope.launch { settings.setAutoGuideTime(enabled) }
+    }
+
+    fun setLiveDefaultCategory(category: String) {
+        _state.value = _state.value.copy(liveDefaultCategory = category)
+        viewModelScope.launch { settings.setLiveDefaultCategory(category) }
     }
 
     fun adjustEpgOffset(deltaMinutes: Int) {

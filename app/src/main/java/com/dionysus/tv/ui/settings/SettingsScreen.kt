@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -373,6 +374,12 @@ fun SettingsScreen(
                         AppButton(onClick = { viewModel.adjustEpgOffset(60) }) { Text("+1h") }
                     }
                 }
+
+                LiveDefaultCategoryPicker(
+                    categories = state.liveCategories,
+                    selected = state.liveDefaultCategory,
+                    onSelect = viewModel::setLiveDefaultCategory,
+                )
             }
         }
 
@@ -495,6 +502,62 @@ fun SettingsScreen(
                         AppButton(onClick = updateViewModel::update, enabled = !updateState.downloading) {
                             Text(if (updateState.downloading) "Updating… ${(updateState.progress * 100).toInt()}%" else "Update now")
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Expandable picker for the category Live TV opens on. Collapsed it shows the
+ * current choice; expanded it lists every channel category (plus "All Channels")
+ * in a scrollable list so any one can be pinned as the landing page.
+ */
+@Composable
+private fun LiveDefaultCategoryPicker(
+    categories: List<String>,
+    selected: String,
+    onSelect: (String) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val currentLabel = selected.ifBlank { "All Channels" }
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            "Live TV opens on",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            "Choose the category Live TV lands on when you open it (e.g. US Movies). \"All Channels\" shows everything.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        AppButton(onClick = { expanded = !expanded }) {
+            Text(if (expanded) "Opens on: $currentLabel  (tap to close)" else "Opens on: $currentLabel")
+        }
+        if (expanded) {
+            if (categories.isEmpty()) {
+                Text(
+                    "Open Live TV once so its categories can load, then come back here.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                val options = listOf("" to "All Channels") + categories.map { it to it }
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().height(300.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    items(options, key = { it.first.ifBlank { "__all__" } }) { (value, label) ->
+                        AppListItem(
+                            selected = value == selected,
+                            onClick = { onSelect(value); expanded = false },
+                            headlineContent = { Text(label, maxLines = 1) },
+                        )
                     }
                 }
             }

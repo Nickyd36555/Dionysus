@@ -64,6 +64,7 @@ data class LiveTvUiState(
     val guideTimeZone: String = "",
     val autoGuideTime: Boolean = true,
     val serverOffsetMs: Long? = null,
+    val defaultCategory: String = "",
     val error: String? = null,
 ) {
     /** Effective "now" correction: provider clock when auto, else manual offset. */
@@ -143,11 +144,22 @@ class LiveTvViewModel @Inject constructor(
     /** The channel to focus in the guide (the one last watched), if any. */
     val lastFocusedChannelId: String? get() = liveSession.lastFocusedId
 
+    /**
+     * True exactly once after returning from the full-screen player, so the guide
+     * can stay put (menus collapsed) instead of re-opening the category rail.
+     */
+    fun consumeReturnToGuide(): Boolean {
+        val v = liveSession.returnToGuide
+        liveSession.returnToGuide = false
+        return v
+    }
+
     /** Hand the current category's channels + EPG to the full-screen live player. */
     fun startLive(channel: Channel) {
         liveSession.channels = state.value.visibleChannels
         liveSession.startId = channel.id
         liveSession.lastFocusedId = channel.id
+        liveSession.returnToGuide = true
         liveSession.epg = state.value.epg
         liveSession.shortEpg = state.value.shortEpg.toMutableMap()
         liveSession.nowOffsetMs = state.value.effectiveOffsetMs
@@ -172,8 +184,29 @@ class LiveTvViewModel @Inject constructor(
         settings.autoGuideTime
             .onEach { auto -> _state.value = _state.value.copy(autoGuideTime = auto) }
             .launchIn(viewModelScope)
+        settings.liveDefaultCategory
+            .onEach { cat -> _state.value = _state.value.copy(defaultCategory = cat); applyDefaultCategory() }
+            .launchIn(viewModelScope)
         refresh()
     }
+
+    /** Apply the configured default landing category once, after channels exist. */
+    private var appliedDefault = false
+    private fun applyDefaultCategory() {
+        if (appliedDefault) return
+        val def = _state.value.defaultCategory
+        if (def.isBlank() || _state.value.channels.isEmpty()) return
+        appliedDefault = true
+        // Only override the initial "All" selection, never a category the user
+        // has already navigated to this session.
+        if (_state.value.selectedCategory == CATEGORY_ALL) {
+            _state.value = _state.value.copy(selectedCategory = def)
+        }
+    }
+
+    /** The leaf category values available to pin as the Live TV landing page. */
+    fun availableCategories(): List<String> =
+        _state.value.channels.map { it.group }.distinct().sorted()
 
     fun refresh() {
         viewModelScope.launch {
@@ -191,6 +224,7 @@ class LiveTvViewModel @Inject constructor(
                     isLoading = false,
                     error = null,
                 )
+                applyDefaultCategory()
             } else {
                 _state.value = _state.value.copy(isLoading = true, hasPlaylists = hasPlaylists, error = null)
             }
@@ -212,6 +246,7 @@ class LiveTvViewModel @Inject constructor(
                 isLoading = false,
                 error = if (ch.isEmpty() && vod.isEmpty() && hasPlaylists) "No channels found in your playlists." else null,
             )
+            applyDefaultCategory()
             val freshEpg = iptv.loadEpg()
             _state.value = _state.value.copy(
                 epg = if (freshEpg.isNotEmpty()) freshEpg else _state.value.epg,

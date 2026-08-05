@@ -20,6 +20,13 @@ class LiveSession @Inject constructor() {
     /** The channel most recently opened, so the guide can restore focus to it. */
     var lastFocusedId: String? = null
 
+    /**
+     * Set when the guide launches the player, so that when the user backs out of
+     * a channel the guide re-opens with the category menu collapsed (staying on
+     * the guide) instead of popping the menu open again.
+     */
+    var returnToGuide: Boolean = false
+
     fun programmesFor(channel: Channel): List<Programme> {
         val fromXmltv = channel.epgId?.let { epg[normEpgId(it)] }.orEmpty()
         return fromXmltv.ifEmpty { shortEpg[channel.id].orEmpty() }
