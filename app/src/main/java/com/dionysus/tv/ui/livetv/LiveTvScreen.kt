@@ -43,6 +43,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -57,6 +58,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,7 +69,9 @@ import coil.compose.AsyncImage
 import com.dionysus.tv.data.iptv.Channel
 import com.dionysus.tv.data.iptv.Programme
 import com.dionysus.tv.ui.components.AppListItem
+import com.dionysus.tv.ui.components.LocalRailController
 import com.dionysus.tv.ui.components.MediaCard
+import kotlinx.coroutines.delay
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -203,13 +207,40 @@ private fun LiveView(
     val railFocus = remember { FocusRequester() }
     val guideFocus = remember { FocusRequester() }
 
-    BackHandler(enabled = !showCategories) { showCategories = true }
+    // Immersive full-screen guide: after 5s of no input, hide BOTH the category
+    // rail and the app's nav rail so the guide fills the screen. Any button press
+    // resets the countdown; Back (or Left on the first channel) brings them back.
+    val railController = LocalRailController.current
+    var immersive by remember { mutableStateOf(false) }
+    var interactionTick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(immersive) { railController.setHidden(immersive) }
+    LaunchedEffect(immersive, interactionTick) {
+        if (immersive) return@LaunchedEffect
+        delay(5_000)
+        showCategories = false
+        immersive = true
+    }
+
+    fun wake() {
+        immersive = false
+        showCategories = true
+    }
+
+    BackHandler(enabled = !showCategories || immersive) { wake() }
 
     LaunchedEffect(showCategories) {
         runCatching { if (showCategories) railFocus.requestFocus() else guideFocus.requestFocus() }
     }
 
-    Row(Modifier.fillMaxSize().padding(top = 12.dp)) {
+    Row(
+        Modifier
+            .fillMaxSize()
+            .padding(top = 12.dp)
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown) interactionTick++
+                false // never consume — just reset the auto-hide countdown
+            },
+    ) {
         if (showCategories) {
             CategoryRail(
                 state = state,
@@ -248,7 +279,7 @@ private fun LiveView(
                 onPlayChannel = onPlayChannel,
                 onFocusChannel = { previewChannel = it; viewModel.prefetchGuide(listOf(it)) },
                 onToggleFavorite = viewModel::toggleFavorite,
-                onExitLeft = if (!showCategories) ({ showCategories = true }) else null,
+                onExitLeft = if (!showCategories) ({ wake() }) else null,
             )
         }
     }

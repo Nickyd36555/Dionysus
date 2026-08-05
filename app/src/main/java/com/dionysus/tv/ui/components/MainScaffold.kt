@@ -27,8 +27,13 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,11 +46,19 @@ import com.dionysus.tv.ui.navigation.TopLevelDestination
 
 private val RAIL_WIDTH = 76.dp
 
+/** Lets a top-level screen hide the nav rail (e.g. the Live TV guide going full-screen). */
+class RailController(val setHidden: (Boolean) -> Unit)
+
+val LocalRailController = staticCompositionLocalOf { RailController {} }
+
 /**
  * The persistent left navigation rail. It is a fixed-width, icon-only rail (no
  * expand/collapse and no width animation) — this is deliberate: earlier
  * focus-driven expansion reflowed content and made the rail flicker open/closed
  * when navigating. A static rail is rock-steady and matches the reference UX.
+ *
+ * A screen may hide the rail entirely (for an immersive full-screen guide) via
+ * [LocalRailController]; the rail is always restored when the destination changes.
  */
 @Composable
 fun MainScaffold(
@@ -53,33 +66,42 @@ fun MainScaffold(
     onSelect: (TopLevelDestination) -> Unit,
     content: @Composable () -> Unit,
 ) {
+    var railHidden by remember { mutableStateOf(false) }
+    // Any navigation restores the rail so it can never get stuck hidden.
+    LaunchedEffect(selected) { railHidden = false }
+    val controller = remember { RailController { railHidden = it } }
+
     Row(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
     ) {
-        Column(
-            modifier = Modifier
-                .width(RAIL_WIDTH)
-                .fillMaxHeight()
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(vertical = 20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Spacer(Modifier.height(4.dp))
-            TopLevelDestination.entries.forEach { dest ->
-                NavRailIcon(
-                    icon = iconFor(dest),
-                    label = dest.label,
-                    selected = dest == selected,
-                    onClick = { onSelect(dest) },
-                )
+        if (!railHidden) {
+            Column(
+                modifier = Modifier
+                    .width(RAIL_WIDTH)
+                    .fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Spacer(Modifier.height(4.dp))
+                TopLevelDestination.entries.forEach { dest ->
+                    NavRailIcon(
+                        icon = iconFor(dest),
+                        label = dest.label,
+                        selected = dest == selected,
+                        onClick = { onSelect(dest) },
+                    )
+                }
             }
         }
 
         Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-            content()
+            CompositionLocalProvider(LocalRailController provides controller) {
+                content()
+            }
         }
     }
 }
