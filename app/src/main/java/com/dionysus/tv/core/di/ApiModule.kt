@@ -5,6 +5,8 @@ import com.dionysus.tv.data.debrid.realdebrid.RealDebridApi
 import com.dionysus.tv.data.debrid.realdebrid.RealDebridAuthApi
 import com.dionysus.tv.data.debrid.realdebrid.RealDebridAuthInterceptor
 import com.dionysus.tv.data.addons.AddonApi
+import com.dionysus.tv.data.ai.AnthropicApi
+import com.dionysus.tv.data.ai.AnthropicAuthInterceptor
 import com.dionysus.tv.data.debrid.realdebrid.RealDebridAuthenticator
 import com.dionysus.tv.data.metadata.TmdbApi
 import com.dionysus.tv.data.metadata.omdb.OmdbApi
@@ -99,4 +101,20 @@ object ApiModule {
         json: Json,
     ): RealDebridApi =
         retrofit(RealDebridApi.BASE_URL, client, json).create(RealDebridApi::class.java)
+
+    @Provides
+    @Singleton
+    @AnthropicClient
+    fun provideAnthropicClient(
+        base: OkHttpClient,
+        interceptor: AnthropicAuthInterceptor,
+    ): OkHttpClient = base.newBuilder().addInterceptor(interceptor).build()
+
+    @Provides
+    @Singleton
+    fun provideAnthropicApi(
+        @AnthropicClient client: OkHttpClient,
+        json: Json,
+    ): AnthropicApi =
+        retrofit(AnthropicApi.BASE_URL, client, json).create(AnthropicApi::class.java)
 }

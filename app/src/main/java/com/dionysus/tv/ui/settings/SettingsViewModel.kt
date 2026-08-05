@@ -34,6 +34,7 @@ data class ScraperInfo(val id: String, val name: String, val enabled: Boolean)
 data class SettingsUiState(
     val tmdbKey: String = "",
     val omdbKey: String = "",
+    val anthropicKey: String = "",
     val premiumizeKey: String = "",
     val orionKey: String = "",
     val torrentioUrl: String = "",
@@ -258,6 +259,7 @@ class SettingsViewModel @Inject constructor(
         _state.value = _state.value.copy(
             tmdbKey = settings.currentTmdbApiKey().orEmpty(),
             omdbKey = settings.currentOmdbApiKey(),
+            anthropicKey = settings.currentAnthropicApiKey().orEmpty(),
             featuredSource = settings.currentFeaturedSource(),
             downloadFolder = settings.currentDownloadFolderUri(),
             epgOffsetMinutes = settings.currentEpgOffsetMinutes(),
@@ -299,6 +301,11 @@ class SettingsViewModel @Inject constructor(
     fun setOmdbKey(value: String) = update(value) {
         _state.value = _state.value.copy(omdbKey = it)
         viewModelScope.launch { settings.setOmdbApiKey(it) }
+    }
+
+    fun setAnthropicKey(value: String) = update(value) {
+        _state.value = _state.value.copy(anthropicKey = it)
+        viewModelScope.launch { settings.setAnthropicApiKey(it) }
     }
 
     fun setPremiumizeKey(value: String) = update(value) {

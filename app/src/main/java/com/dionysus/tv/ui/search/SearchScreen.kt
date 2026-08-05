@@ -55,6 +55,9 @@ fun SearchScreen(
 ) {
     val query by viewModel.query.collectAsStateWithLifecycle()
     val results by viewModel.results.collectAsStateWithLifecycle()
+    val aiResults by viewModel.aiResults.collectAsStateWithLifecycle()
+    val aiLoading by viewModel.aiLoading.collectAsStateWithLifecycle()
+    val aiMessage by viewModel.aiMessage.collectAsStateWithLifecycle()
     var filter by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(SearchFilter.ALL) }
 
     // VOD/Live items play directly; catalog items open their detail page.
@@ -74,13 +77,21 @@ fun SearchScreen(
         Row(
             modifier = Modifier.padding(top = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             SearchFilter.entries.forEach { f ->
                 FilterPill(label = f.label, selected = filter == f, onClick = { filter = f })
             }
+            AiSimilarButton(
+                loading = aiLoading,
+                enabled = query.trim().length >= 2,
+                onClick = viewModel::aiSimilarSearch,
+            )
         }
 
-        if (results.isEmpty() && query.trim().length >= 2) {
+        val nothing = results.isEmpty() && aiResults.isEmpty() && !aiLoading &&
+            aiMessage == null && query.trim().length >= 2
+        if (nothing) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     "No results for \"$query\"",
@@ -92,18 +103,71 @@ fun SearchScreen(
             val live = results.filter { it.source == MediaSource.LIVE_TV }
             val movies = results.filter { it.source != MediaSource.LIVE_TV && it.type == MediaType.MOVIE }
             val shows = results.filter { it.source != MediaSource.LIVE_TV && it.type == MediaType.TV_SHOW }
+            val aiVisible = filter != SearchFilter.LIVE
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(124.dp),
                 contentPadding = PaddingValues(top = 20.dp, bottom = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
+                // AI "Similar To" picks lead the list when present.
+                if (aiVisible && aiLoading) fullWidth("✨  Finding similar titles with AI…")
+                if (aiVisible && !aiLoading && aiMessage != null) fullWidth("✨  ${aiMessage}")
+                if (aiVisible && aiResults.isNotEmpty()) {
+                    val picks = when (filter) {
+                        SearchFilter.MOVIES -> aiResults.filter { it.type == MediaType.MOVIE }
+                        SearchFilter.TV -> aiResults.filter { it.type == MediaType.TV_SHOW }
+                        else -> aiResults
+                    }
+                    section("✨ Similar picks (AI)", picks, open)
+                }
                 if (filter == SearchFilter.ALL || filter == SearchFilter.LIVE) liveSection("On Live TV", live, open)
                 if (filter == SearchFilter.ALL || filter == SearchFilter.MOVIES) section("Movies", movies, open)
                 if (filter == SearchFilter.ALL || filter == SearchFilter.TV) section("TV Shows", shows, open)
             }
         }
     }
+}
+
+/** Full-width status line inside the results grid (AI loading / error). */
+private fun LazyGridScope.fullWidth(text: String) {
+    item(span = { GridItemSpan(maxLineSpan) }) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+        )
+    }
+}
+
+/** Pill that kicks off an AI "Similar To" search on the current query. */
+@Composable
+private fun AiSimilarButton(loading: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val shape = RoundedCornerShape(20.dp)
+    val active = enabled && !loading
+    val bg = when {
+        focused && active -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val fg = when {
+        !active -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+        focused -> MaterialTheme.colorScheme.onPrimary
+        else -> MaterialTheme.colorScheme.primary
+    }
+    Text(
+        text = if (loading) "✨ Finding…" else "✨ Similar (AI)",
+        style = MaterialTheme.typography.titleSmall,
+        color = fg,
+        modifier = Modifier
+            .clip(shape)
+            .background(bg)
+            .then(if (active && !focused) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, shape) else Modifier)
+            .clickable(interactionSource = interaction, indication = null, enabled = active, onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 8.dp),
+    )
 }
 
 private enum class SearchFilter(val label: String) {

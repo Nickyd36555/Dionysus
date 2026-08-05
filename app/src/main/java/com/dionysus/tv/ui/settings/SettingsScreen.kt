@@ -190,6 +190,25 @@ fun SettingsScreen(
             )
         }
 
+        // ---- AI Search -----------------------------------------------------
+        item { SectionHeader("AI Search") }
+        item {
+            SettingTextField(
+                label = "Anthropic (Claude) API key — powers ✨ Similar (AI) recommendations",
+                value = state.anthropicKey,
+                onValueChange = viewModel::setAnthropicKey,
+                isSecret = true,
+            )
+        }
+        item {
+            Text(
+                "Get a key at console.anthropic.com. Used on Search: type a title and tap ✨ Similar (AI) to find movies & shows like it.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth(0.85f).padding(bottom = 4.dp),
+            )
+        }
+
         // ---- Scrapers ------------------------------------------------------
         item { SectionHeader("Scrapers") }
         item {

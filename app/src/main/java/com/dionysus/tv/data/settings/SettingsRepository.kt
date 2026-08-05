@@ -35,6 +35,7 @@ class SettingsRepository @Inject constructor(
         val ORION_API_KEY = stringPreferencesKey("orion_api_key")
         val TMDB_API_KEY = stringPreferencesKey("tmdb_api_key")
         val OMDB_API_KEY = stringPreferencesKey("omdb_api_key")
+        val ANTHROPIC_API_KEY = stringPreferencesKey("anthropic_api_key")
         val TORRENTIO_BASE_URL = stringPreferencesKey("torrentio_base_url")
         val PREFERRED_PLAYER = stringPreferencesKey("preferred_player")
         val HOME_LAYOUT = stringPreferencesKey("home_layout_json")
@@ -55,6 +56,9 @@ class SettingsRepository @Inject constructor(
 
     /** OMDb key powers the extra movie/show info (cast, RT/Metacritic, awards). */
     val omdbApiKey: Flow<String> = get(Keys.OMDB_API_KEY).map { it ?: DEFAULT_OMDB_KEY }
+
+    /** Anthropic (Claude) API key powering AI "Similar To" / recommendation search. */
+    val anthropicApiKey: Flow<String?> = get(Keys.ANTHROPIC_API_KEY)
 
     val torrentioBaseUrl: Flow<String> =
         get(Keys.TORRENTIO_BASE_URL).map { it ?: DEFAULT_TORRENTIO_URL }
@@ -122,6 +126,8 @@ class SettingsRepository @Inject constructor(
     suspend fun setOrionApiKey(key: String?) = put(Keys.ORION_API_KEY, key)
     suspend fun setTmdbApiKey(key: String?) = put(Keys.TMDB_API_KEY, key)
     suspend fun setOmdbApiKey(key: String?) = put(Keys.OMDB_API_KEY, key)
+    suspend fun setAnthropicApiKey(key: String?) = put(Keys.ANTHROPIC_API_KEY, key)
+    suspend fun currentAnthropicApiKey(): String? = anthropicApiKey.first()
     suspend fun setTorrentioBaseUrl(url: String) = put(Keys.TORRENTIO_BASE_URL, url)
     suspend fun setPreferredPlayer(id: String) = put(Keys.PREFERRED_PLAYER, id)
     suspend fun setHomeLayoutJson(json: String) = put(Keys.HOME_LAYOUT, json)

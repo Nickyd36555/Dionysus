@@ -6,3 +6,8 @@ import javax.inject.Qualifier
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class RealDebridClient
+
+/** OkHttp client that injects the Anthropic API key + version headers. */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class AnthropicClient
