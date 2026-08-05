@@ -35,11 +35,14 @@ object Routes {
             "&poster=${Uri.encode(poster.orEmpty())}&backdrop=${Uri.encode(backdrop.orEmpty())}"
 }
 
-/** Top-level destinations shown in the navigation rail. */
+/**
+ * Top-level destinations shown in the navigation rail. Movies (VOD) is
+ * intentionally not here — it's reached from the "Movies (VOD)" shortcut at the
+ * top of the Live TV category rail — but Routes.MOVIES still exists for it.
+ */
 enum class TopLevelDestination(val route: String, val label: String) {
     HOME(Routes.HOME, "Home"),
     LIVE_TV(Routes.LIVE_TV, "Live TV"),
-    MOVIES(Routes.MOVIES, "Movies"),
     SEARCH(Routes.SEARCH, "Search"),
     DOWNLOADS(Routes.DOWNLOADS, "Downloads"),
     SETTINGS(Routes.SETTINGS, "Settings"),

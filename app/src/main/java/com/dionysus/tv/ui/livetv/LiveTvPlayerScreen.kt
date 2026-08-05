@@ -90,6 +90,7 @@ fun LiveTvPlayerScreen(
                 "--no-mediacodec-dr",
                 "--no-omxil-dr",
                 "--audio-time-stretch",
+                "--audio-resampler=soxr",   // high-quality audio resampling
             ),
         )
     }

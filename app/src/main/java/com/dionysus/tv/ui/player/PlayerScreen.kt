@@ -97,6 +97,10 @@ fun PlayerScreen(
     val barFocus = remember { FocusRequester() }
     val panelFocus = remember { FocusRequester() }
 
+    // libvlc-all bundles the full software codec set (HEVC/H.264/VP9/AV1 video;
+    // AAC/AC3/E-AC3 "Dolby Digital+"/DTS/DTS-HD/TrueHD/FLAC/Opus audio), so
+    // anything that won't hardware-decode still plays in software. HW decode is
+    // enabled per-media (setHWDecoderEnabled) with an automatic software fallback.
     val libVlc = remember {
         LibVLC(
             context,
@@ -109,6 +113,7 @@ fun PlayerScreen(
                 "--no-mediacodec-dr",
                 "--no-omxil-dr",
                 "--audio-time-stretch",
+                "--audio-resampler=soxr",   // high-quality audio resampling
             ),
         )
     }
