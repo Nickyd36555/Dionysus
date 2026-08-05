@@ -2,7 +2,6 @@
 
 package com.dionysus.tv.ui.components
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,10 +39,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
+import coil.compose.AsyncImage
 import com.dionysus.tv.R
 import com.dionysus.tv.ui.navigation.TopLevelDestination
 
@@ -143,8 +142,10 @@ private fun NavRailImage(
             .clickable(interactionSource = interaction, indication = null) { onClick() },
         contentAlignment = Alignment.Center,
     ) {
-        Image(
-            painter = painterResource(imageRes),
+        // Use Coil (not painterResource) so adaptive-icon mipmaps render instead
+        // of crashing — painterResource can't parse <adaptive-icon> XML.
+        AsyncImage(
+            model = imageRes,
             contentDescription = label,
             contentScale = ContentScale.Fit,
             modifier = Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)),

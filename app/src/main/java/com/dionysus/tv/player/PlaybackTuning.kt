@@ -13,7 +13,7 @@ import android.content.Context
  * scale by device tier is the CPU-heavy post-processing:
  *
  *  - HIGH  (>=6 cores, >=3 GB RAM): motion-compensated deinterlacing (yadif2x)
- *          plus light artifact clean-up — the best broadcast/SD-to-4K result.
+ *          — the smoothest broadcast/SD-to-4K result.
  *  - MEDIUM(>=4 cores, >=2 GB RAM): standard yadif deinterlacing.
  *  - LOW   (everything else):       cheap linear deinterlacing so weak boxes
  *          stay smooth.
@@ -56,17 +56,9 @@ object PlaybackTuning {
             "--deinterlace=-1",         // auto: only engages on interlaced sources
         )
         when (tier) {
-            Tier.HIGH -> {
-                opts += "--deinterlace-mode=yadif2x"
-                opts += "--video-filter=postproc"
-                opts += "--postproc-q=4"
-            }
-            Tier.MEDIUM -> {
-                opts += "--deinterlace-mode=yadif"
-            }
-            Tier.LOW -> {
-                opts += "--deinterlace-mode=linear"
-            }
+            Tier.HIGH -> opts += "--deinterlace-mode=yadif2x"
+            Tier.MEDIUM -> opts += "--deinterlace-mode=yadif"
+            Tier.LOW -> opts += "--deinterlace-mode=linear"
         }
         return opts
     }
