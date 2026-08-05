@@ -301,7 +301,7 @@ private fun NowNextPreview(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            modifier = Modifier.size(120.dp, 68.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF0B0B10)),
+            modifier = Modifier.size(92.dp, 52.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF0B0B10)),
             contentAlignment = Alignment.Center,
         ) {
             if (channel.logo != null) {
@@ -309,13 +309,13 @@ private fun NowNextPreview(
                     model = channel.logo,
                     contentDescription = channel.name,
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize().padding(8.dp),
+                    modifier = Modifier.fillMaxSize().padding(6.dp),
                 )
             } else {
                 Text(channel.name.take(2).uppercase(), color = MaterialTheme.colorScheme.primary)
             }
         }
-        Column(Modifier.weight(1f).padding(start = 16.dp)) {
+        Column(Modifier.weight(1f).padding(start = 14.dp)) {
             Text(channel.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
             val now = nowNext.now
             if (now != null) {
@@ -610,10 +610,11 @@ internal fun VodGrid(vod: List<com.dionysus.tv.core.model.MediaItem>, onPlay: (S
 }
 
 // Timeline geometry.
-private const val PX_PER_MIN = 5           // dp of width per minute of programme time
+// Guide geometry, sized ~3/4 of the original so more rows/time fit on screen.
+private const val PX_PER_MIN = 4           // dp of width per minute of programme time
 private const val SLOT_MIN = 30            // ruler tick every 30 minutes
-private val CHANNEL_COL_WIDTH = 220.dp
-private val GUIDE_ROW_HEIGHT = 56.dp
+private val CHANNEL_COL_WIDTH = 168.dp
+private val GUIDE_ROW_HEIGHT = 42.dp
 
 @Composable
 private fun EpgGuide(
@@ -798,9 +799,9 @@ private fun ChannelLabel(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-        Text(number.toString(), style = MaterialTheme.typography.labelLarge, color = fg.copy(alpha = 0.7f))
+        Text(number.toString(), style = MaterialTheme.typography.labelMedium, color = fg.copy(alpha = 0.7f))
         Box(
-            modifier = Modifier.size(44.dp, 40.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFF0B0B10)),
+            modifier = Modifier.size(34.dp, 30.dp).clip(RoundedCornerShape(5.dp)).background(Color(0xFF0B0B10)),
             contentAlignment = Alignment.Center,
         ) {
             if (channel.logo != null) {
@@ -808,19 +809,19 @@ private fun ChannelLabel(
                     model = channel.logo,
                     contentDescription = channel.name,
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize().padding(3.dp),
+                    modifier = Modifier.fillMaxSize().padding(2.dp),
                 )
             }
         }
         Text(
             channel.name,
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.bodyMedium,
             color = fg,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        if (favorite) Text("★", color = Color(0xFFFFD54F), style = MaterialTheme.typography.labelLarge)
+        if (favorite) Text("★", color = Color(0xFFFFD54F), style = MaterialTheme.typography.labelMedium)
     }
 }
 
@@ -844,12 +845,12 @@ private fun ProgrammeBlock(widthDp: androidx.compose.ui.unit.Dp, time: String, t
             .background(bg)
             .then(if (isNow && !focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape) else Modifier)
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.bodyMedium,
             color = fg,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

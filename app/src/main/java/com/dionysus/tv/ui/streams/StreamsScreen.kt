@@ -3,11 +3,15 @@
 package com.dionysus.tv.ui.streams
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -21,6 +25,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Alignment
@@ -30,11 +35,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.dionysus.tv.core.model.StreamSource
-import com.dionysus.tv.ui.components.AppButton
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -79,16 +84,20 @@ fun StreamsScreen(
             state.isLoading -> LoadingWithArt(state, "Searching sources for \"${state.title}\"…")
             state.resolvingTitle != null -> LoadingWithArt(state, "Resolving \"${state.resolvingTitle}\"…")
             state.error != null -> Centered(state.error!!)
-            else -> LazyColumn(
-                contentPadding = PaddingValues(top = 24.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(state.sources, key = { it.title + it.provider + (it.infoHash ?: "") }) { source ->
-                    SourceRow(
-                        source = source,
-                        onPlay = { viewModel.play(source) },
-                        onDownload = { viewModel.download(source) },
-                    )
+            else -> {
+                // Largest (best-quality) source first.
+                val sorted = state.sources.sortedByDescending { it.sizeBytes ?: -1L }
+                LazyColumn(
+                    contentPadding = PaddingValues(top = 20.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(sorted, key = { it.title + it.provider + (it.infoHash ?: "") }) { source ->
+                        SourceRow(
+                            source = source,
+                            onPlay = { viewModel.play(source) },
+                            onDownload = { viewModel.download(source) },
+                        )
+                    }
                 }
             }
         }
@@ -97,16 +106,25 @@ fun StreamsScreen(
 
 @Composable
 private fun SourceRow(source: StreamSource, onPlay: () -> Unit, onDownload: () -> Unit) {
+    // Flat "stone tablet": sharp corners, a thin border, and a slim accent bar on
+    // the left — cleaner and more classical than a rounded, bubbly card.
+    val shape = RoundedCornerShape(3.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(16.dp),
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f), shape),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(56.dp)
+                .background(MaterialTheme.colorScheme.primary),
+        )
         QualityBadge(source.quality.label)
-        Column(modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {
+        Column(modifier = Modifier.weight(1f).padding(horizontal = 16.dp, vertical = 14.dp)) {
             Text(
                 text = source.title,
                 style = MaterialTheme.typography.titleMedium,
@@ -116,17 +134,18 @@ private fun SourceRow(source: StreamSource, onPlay: () -> Unit, onDownload: () -
             )
             Text(
                 text = buildString {
-                    append(source.provider)
-                    source.sizeBytes?.let { append("  •  ${formatSize(it)}") }
-                    source.seeders?.let { append("  •  $it seeders") }
+                    source.sizeBytes?.let { append(formatSize(it)) }
+                    append(if (isEmpty()) source.provider else "  ·  ${source.provider}")
+                    source.seeders?.let { append("  ·  $it seeders") }
                     if (source.cachedOn.isNotEmpty()) {
-                        append("  •  cached: ${source.cachedOn.joinToString { it.displayName }}")
+                        append("  ·  cached: ${source.cachedOn.joinToString { it.displayName }}")
                     }
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                letterSpacing = 0.3.sp,
             )
         }
         if (source.cachedOn.isNotEmpty()) {
@@ -137,15 +156,49 @@ private fun SourceRow(source: StreamSource, onPlay: () -> Unit, onDownload: () -
                 modifier = Modifier.padding(end = 12.dp),
             )
         }
-        // Two distinct, focusable actions so Play and Download are both reachable.
-        AppButton(onClick = onPlay, modifier = Modifier.padding(end = 8.dp)) {
-            Icon(Icons.Default.PlayArrow, contentDescription = null)
-            Text("  Play")
-        }
-        AppButton(onClick = onDownload) {
-            Icon(Icons.Default.Download, contentDescription = null)
-            Text("  Download")
-        }
+        // Two distinct, focusable actions. Play is emphasized (filled); Download is
+        // a lighter outline so the row reads calmer.
+        ActionButton(label = "PLAY", icon = Icons.Default.PlayArrow, filled = true, onClick = onPlay)
+        Spacer(Modifier.width(8.dp))
+        ActionButton(label = "DOWNLOAD", icon = Icons.Default.Download, filled = false, onClick = onDownload)
+        Spacer(Modifier.width(12.dp))
+    }
+}
+
+/** Sleek, rectangular action button — filled (primary) or outlined. */
+@Composable
+private fun ActionButton(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    filled: Boolean,
+    onClick: () -> Unit,
+) {
+    val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val shape = RoundedCornerShape(3.dp)
+    val primary = MaterialTheme.colorScheme.primary
+    val bg = when {
+        focused -> primary
+        filled -> primary.copy(alpha = 0.9f)
+        else -> androidx.compose.ui.graphics.Color.Transparent
+    }
+    val fg = if (filled || focused) MaterialTheme.colorScheme.onPrimary else primary
+    Row(
+        modifier = Modifier
+            .clip(shape)
+            .background(bg)
+            .border(1.dp, if (focused) MaterialTheme.colorScheme.onPrimary else primary.copy(alpha = 0.7f), shape)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.height(18.dp))
+        Text(
+            "  $label",
+            style = MaterialTheme.typography.labelLarge,
+            color = fg,
+            letterSpacing = 1.5.sp,
+        )
     }
 }
 
@@ -192,14 +245,17 @@ private fun LoadingWithArt(state: StreamsUiState, message: String) {
 private fun QualityBadge(label: String) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(MaterialTheme.colorScheme.primary)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            .padding(start = 14.dp)
+            .clip(RoundedCornerShape(2.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f))
+            .border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))
+            .padding(horizontal = 9.dp, vertical = 5.dp),
     ) {
         Text(
-            text = label,
+            text = label.uppercase(),
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onPrimary,
+            color = MaterialTheme.colorScheme.primary,
+            letterSpacing = 1.sp,
         )
     }
 }

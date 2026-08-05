@@ -89,6 +89,9 @@ class SettingsViewModel @Inject constructor(
 
     init {
         viewModelScope.launch { loadInitial() }
+        // Seed the default home rows here too, so Customize Home is populated even
+        // if the user opens Settings before ever visiting the Home screen.
+        viewModelScope.launch { homeLayout.ensureSeeded() }
         homeLayout.rows
             .onEach { rows -> _state.value = _state.value.copy(homeRows = rows) }
             .launchIn(viewModelScope)
