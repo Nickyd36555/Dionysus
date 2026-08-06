@@ -22,10 +22,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
+import com.dionysus.tv.ui.theme.DionysusGold
+import com.dionysus.tv.ui.theme.DionysusGoldBright
+import com.dionysus.tv.ui.theme.DionysusGoldDeep
+import com.dionysus.tv.ui.theme.DionysusOnGold
 
 /*
  * Touch- AND D-pad-friendly controls.
@@ -55,26 +62,34 @@ fun AppButton(
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     val pressed by interaction.collectIsPressedAsState()
-    val base = MaterialTheme.colorScheme.primary
-    // Focused = brighter gold fill so the button clearly reads as selected on a TV;
-    // pressed dims slightly; disabled fades.
-    val bg = when {
-        !enabled -> base.copy(alpha = 0.35f)
-        pressed -> base.copy(alpha = 0.82f)
-        focused -> MaterialTheme.colorScheme.primaryContainer
-        else -> base
-    }
     val shape = RoundedCornerShape(CornerSharp)
+    // Embossed metal: a vertical gradient (bright sheen on top → deep gold below)
+    // reads as a raised, 3D plate. Focus brightens + lifts; pressed inverts the
+    // gradient so it looks pushed in.
+    val fill = when {
+        !enabled -> Brush.verticalGradient(
+            listOf(DionysusGold.copy(alpha = 0.4f), DionysusGoldDeep.copy(alpha = 0.4f)),
+        )
+        pressed -> Brush.verticalGradient(listOf(DionysusGoldDeep, DionysusGold))
+        focused -> Brush.verticalGradient(listOf(DionysusGoldBright, DionysusGold))
+        else -> Brush.verticalGradient(listOf(DionysusGold, DionysusGoldDeep))
+    }
+    val bevel = Brush.verticalGradient(listOf(DionysusGoldBright, DionysusGoldDeep))
     Row(
         modifier = modifier
-            .clip(shape)
-            .background(bg)
-            .then(
-                if (focused) Modifier.border(HairlineFocus, MaterialTheme.colorScheme.onSurface, shape)
-                else Modifier,
+            .shadow(
+                elevation = if (!enabled) 0.dp else if (focused) 12.dp else 5.dp,
+                shape = shape,
+                spotColor = DionysusGold,
+                ambientColor = Color.Black,
             )
+            .clip(shape)
             .clickable(enabled = enabled, interactionSource = interaction, indication = null) { onClick() }
-            .padding(horizontal = 22.dp, vertical = 12.dp),
+            .background(fill)
+            .border(1.5.dp, bevel, shape) // beveled metallic frame (bright top, dark bottom)
+            .padding(2.5.dp)
+            .border(Hairline, DionysusOnGold.copy(alpha = 0.30f), RoundedCornerShape(2.dp)) // engraved inner line
+            .padding(horizontal = 18.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
@@ -94,14 +109,22 @@ fun AppSurface(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    // Thin gold hairline at rest; brighter, slightly thicker gold on focus.
-    val borderColor = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.border
-    val borderWidth = if (focused) HairlineFocus else Hairline
+    // Subtly raised panel: a soft top-to-bottom gradient plus a gold hairline at
+    // rest, upgrading to a beveled gold frame and a lift shadow on focus.
+    val panel = Brush.verticalGradient(
+        listOf(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.surface),
+    )
+    val frame = if (focused) {
+        Modifier.border(HairlineFocus, Brush.verticalGradient(listOf(DionysusGoldBright, DionysusGoldDeep)), shape)
+    } else {
+        Modifier.border(Hairline, MaterialTheme.colorScheme.border, shape)
+    }
     Column(
         modifier = modifier
+            .shadow(if (focused) 8.dp else 0.dp, shape, spotColor = DionysusGold, ambientColor = Color.Black)
             .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .border(borderWidth, borderColor, shape)
+            .background(panel)
+            .then(frame)
             .clickable(interactionSource = interaction, indication = null) { onClick() },
     ) {
         CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {

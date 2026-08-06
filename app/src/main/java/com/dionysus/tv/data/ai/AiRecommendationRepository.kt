@@ -86,8 +86,8 @@ class AiRecommendationRepository @Inject constructor(
         return when {
             resolved.isNotEmpty() -> DataResult.Success(resolved)
             anyLookupError -> DataResult.Error(
-                "Couldn't look up the AI's picks. Add a TMDB API key in Settings → " +
-                    "Metadata so recommendations can show as cards.",
+                "Couldn't reach TMDB to look up the AI's picks — check your TMDB key in " +
+                    "Settings → Metadata (use the v3 API key or the v4 Read Access Token).",
             )
             else -> DataResult.Success(emptyList()) // AI answered, TMDB searched, no card matched
         }

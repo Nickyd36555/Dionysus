@@ -30,8 +30,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import com.dionysus.tv.ui.theme.DionysusGold
+import com.dionysus.tv.ui.theme.DionysusGoldBright
+import com.dionysus.tv.ui.theme.DionysusGoldDeep
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -73,13 +78,20 @@ fun MediaCard(
                 onLongClick = onLongClick,
             ),
     ) {
+        // A gold frame at rest (subtle) that becomes a beveled gold edge + lift on focus.
+        val frame = if (focused) {
+            Modifier.border(2.5.dp, Brush.verticalGradient(listOf(DionysusGoldBright, DionysusGoldDeep)), shape)
+        } else {
+            Modifier.border(1.dp, MaterialTheme.colorScheme.border, shape)
+        }
         Box(
             modifier = Modifier
                 .width(CardWidth)
                 .height(PosterHeight)
+                .shadow(if (focused) 14.dp else 2.dp, shape, spotColor = DionysusGold, ambientColor = Color.Black)
                 .clip(shape)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                .then(if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape) else Modifier),
+                .then(frame),
         ) {
             if (item.posterUrl != null) {
                 AsyncImage(

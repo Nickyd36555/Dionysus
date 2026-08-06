@@ -9,6 +9,7 @@ import com.dionysus.tv.data.ai.AnthropicApi
 import com.dionysus.tv.data.ai.AnthropicAuthInterceptor
 import com.dionysus.tv.data.debrid.realdebrid.RealDebridAuthenticator
 import com.dionysus.tv.data.metadata.TmdbApi
+import com.dionysus.tv.data.metadata.TmdbAuthInterceptor
 import com.dionysus.tv.data.metadata.omdb.OmdbApi
 import com.dionysus.tv.data.scraper.orion.OrionApi
 import com.dionysus.tv.data.scraper.torrentio.TorrentioApi
@@ -56,7 +57,15 @@ object ApiModule {
 
     @Provides
     @Singleton
-    fun provideTmdbApi(client: OkHttpClient, json: Json): TmdbApi =
+    @TmdbClient
+    fun provideTmdbClient(
+        base: OkHttpClient,
+        interceptor: TmdbAuthInterceptor,
+    ): OkHttpClient = base.newBuilder().addInterceptor(interceptor).build()
+
+    @Provides
+    @Singleton
+    fun provideTmdbApi(@TmdbClient client: OkHttpClient, json: Json): TmdbApi =
         retrofit(TmdbApi.BASE_URL, client, json).create(TmdbApi::class.java)
 
     @Provides
