@@ -12,6 +12,7 @@ import com.dionysus.tv.core.model.Season
 import com.dionysus.tv.data.addons.AddonMeta
 import com.dionysus.tv.data.addons.AddonRepository
 import com.dionysus.tv.data.addons.toMediaItem
+import com.dionysus.tv.data.ai.AiRecommendationRepository
 import com.dionysus.tv.data.local.LibraryRepository
 import com.dionysus.tv.data.metadata.MetadataRepository
 import com.dionysus.tv.data.metadata.omdb.OmdbRepository
@@ -32,6 +33,9 @@ data class DetailUiState(
     val isFavorite: Boolean = false,
     val resumePositionMs: Long = 0L,
     val extra: MovieExtra? = null,
+    val similar: List<MediaItem> = emptyList(),
+    val similarLoading: Boolean = false,
+    val similarMessage: String? = null,
     val isLoading: Boolean = true,
     val error: String? = null,
 )
@@ -43,6 +47,7 @@ class DetailViewModel @Inject constructor(
     private val addons: AddonRepository,
     private val library: LibraryRepository,
     private val omdb: OmdbRepository,
+    private val ai: AiRecommendationRepository,
 ) : ViewModel() {
 
     val mediaId: String = savedStateHandle.get<String>("mediaId").orEmpty()
@@ -173,6 +178,30 @@ class DetailViewModel @Inject constructor(
         val item = _state.value.item ?: return
         viewModelScope.launch {
             library.toggleFavorite(item, makeFavorite = !_state.value.isFavorite)
+        }
+    }
+
+    /** Ask Claude for titles similar to this one, resolved to real cards. */
+    fun findSimilar() {
+        val item = _state.value.item ?: return
+        if (_state.value.similarLoading) return
+        val query = item.title + (item.year?.let { " ($it)" } ?: "")
+        viewModelScope.launch {
+            _state.value = _state.value.copy(similarLoading = true, similarMessage = null)
+            when (val r = ai.similarTo(query)) {
+                is DataResult.Success -> {
+                    val picks = r.data.filter { it.id != item.id }
+                    _state.value = _state.value.copy(
+                        similar = picks,
+                        similarLoading = false,
+                        similarMessage = if (picks.isEmpty()) "No AI matches found." else null,
+                    )
+                }
+                is DataResult.Error -> _state.value = _state.value.copy(
+                    similarLoading = false,
+                    similarMessage = r.message,
+                )
+            }
         }
     }
 }

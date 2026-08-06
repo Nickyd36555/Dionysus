@@ -34,9 +34,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.dionysus.tv.core.model.Episode
+import com.dionysus.tv.core.model.MediaItem
 import com.dionysus.tv.core.model.MediaType
 import com.dionysus.tv.ui.components.AppButton
 import com.dionysus.tv.ui.components.AppListItem
+import com.dionysus.tv.ui.components.MediaCard
 import com.dionysus.tv.ui.theme.DionysusBackground
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
@@ -46,6 +48,7 @@ import androidx.tv.material3.Text
 fun DetailScreen(
     onFindSources: (mediaId: String, season: Int?, episode: Int?) -> Unit,
     onBack: () -> Unit,
+    onOpenDetail: (String) -> Unit = {},
     viewModel: DetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -132,6 +135,9 @@ fun DetailScreen(
                             )
                             Text(if (state.isFavorite) "  In My List" else "  My List")
                         }
+                        AppButton(onClick = viewModel::findSimilar) {
+                            Text(if (state.similarLoading) "✨ Finding…" else "✨ Similar")
+                        }
                     }
                 }
             }
@@ -139,6 +145,10 @@ fun DetailScreen(
 
         state.extra?.let { extra ->
             item { ExtraInfoSection(extra) }
+        }
+
+        if (state.similarLoading || state.similar.isNotEmpty() || state.similarMessage != null) {
+            item { SimilarSection(state, onOpenDetail) }
         }
 
         if (item.type == MediaType.TV_SHOW && state.seasons.isNotEmpty()) {
@@ -166,6 +176,43 @@ fun DetailScreen(
                     episode = episode,
                     onClick = { onFindSources(item.id, episode.seasonNumber, episode.episodeNumber) },
                 )
+            }
+        }
+    }
+}
+
+/** AI "More like this" row on the detail page — Claude picks, resolved to cards. */
+@Composable
+private fun SimilarSection(state: DetailUiState, onOpenDetail: (String) -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 24.dp)) {
+        Text(
+            text = "✨ More like this (AI)",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(start = 48.dp, bottom = 12.dp),
+        )
+        when {
+            state.similarLoading -> Text(
+                "Finding similar titles with AI…",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 48.dp),
+            )
+            state.similarMessage != null -> Text(
+                state.similarMessage,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 48.dp),
+            )
+            else -> LazyRow(
+                contentPadding = PaddingValues(horizontal = 48.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                items(state.similar, key = { it.id }) { m: MediaItem ->
+                    Box(Modifier.width(124.dp)) {
+                        MediaCard(item = m, onClick = { onOpenDetail(m.id) }, showTitle = true)
+                    }
+                }
             }
         }
     }

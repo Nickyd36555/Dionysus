@@ -122,7 +122,16 @@ fun PlayerScreen(
     var audioDelayMs by remember { mutableLongStateOf(0L) }
     var subDelayMs by remember { mutableLongStateOf(0L) }
 
-    val isLive = lengthMs <= 0
+    // Playback lifecycle: distinguishes "still buffering" from "actually failed"
+    // so a stream that never loads shows an error instead of a black LIVE screen.
+    var hasPlayed by remember { mutableStateOf(false) }
+    var playbackError by remember { mutableStateOf(false) }
+    var retryCount by remember { mutableIntStateOf(0) }
+    val errorFocus = remember { FocusRequester() }
+
+    // Only a stream that IS playing yet reports no length is genuinely live.
+    // A black screen that never started (hasPlayed == false) is a failure, not live.
+    val isLive = hasPlayed && lengthMs <= 0
 
     fun bump() { controlsVisible = true; interaction++ }
     fun showControls() { controlsVisible = true; interaction++ }
@@ -136,12 +145,46 @@ fun PlayerScreen(
     }
     fun closePanel() { panel = Panel.NONE; bump() }
 
+    val uri = remember { Uri.parse(viewModel.url) }
+    // Holds the open file descriptor for content:// sources; kept across retries
+    // and closed on dispose. A one-slot array so the lambdas can swap it.
+    val pfdHolder = remember { arrayOfNulls<android.os.ParcelFileDescriptor>(1) }
+
+    // Report hard failures so the UI can show an actionable error instead of a
+    // black screen. LibVLC events arrive on its own thread; Compose snapshot
+    // state is safe to write from there.
     DisposableEffect(Unit) {
-        val uri = Uri.parse(viewModel.url)
+        player.setEventListener { event ->
+            when (event.type) {
+                MediaPlayer.Event.EncounteredError -> playbackError = true
+                MediaPlayer.Event.Playing -> { hasPlayed = true; playbackError = false }
+                else -> Unit
+            }
+        }
+        onDispose {
+            viewModel.saveProgress(player.time, player.length)
+            player.setEventListener(null)
+            player.stop()
+            player.detachViews()
+            player.release()
+            libVlc.release()
+            runCatching { pfdHolder[0]?.close() }
+        }
+    }
+
+    // (Re)load the media. Re-runs on Retry by bumping retryCount.
+    LaunchedEffect(retryCount) {
+        hasPlayed = false
+        playbackError = false
+        seeked = false
+        runCatching { if (retryCount > 0) player.stop() }
+        runCatching { pfdHolder[0]?.close() }
+        pfdHolder[0] = null
         // SAF-downloaded files are content:// — LibVLC needs a file descriptor for those.
         val pfd = if (uri.scheme == "content") {
             runCatching { context.contentResolver.openFileDescriptor(uri, "r") }.getOrNull()
         } else null
+        pfdHolder[0] = pfd
         val media = if (pfd != null) {
             Media(libVlc, pfd.fileDescriptor)
         } else {
@@ -150,14 +193,6 @@ fun PlayerScreen(
         player.media = media
         media.release()
         player.play()
-        onDispose {
-            viewModel.saveProgress(player.time, player.length)
-            player.stop()
-            player.detachViews()
-            player.release()
-            libVlc.release()
-            runCatching { pfd?.close() }
-        }
     }
 
     // Apply playback settings whenever the user changes them.
@@ -167,15 +202,25 @@ fun PlayerScreen(
     LaunchedEffect(subDelayMs) { runCatching { player.spuDelay = subDelayMs * 1000 } }
 
     // Poll player for UI + apply the resume point once the length is known.
-    LaunchedEffect(Unit) {
+    LaunchedEffect(retryCount) {
+        var stalled = 0L
         while (true) {
             positionMs = player.time
             lengthMs = player.length
             isPlaying = player.isPlaying
+            if (player.isPlaying || lengthMs > 0) hasPlayed = true
             val resume = viewModel.startPositionMs.value
             if (!seeked && lengthMs > 0 && resume != null && resume > 3_000) {
                 player.time = resume
                 seeked = true
+            }
+            // Nothing ever started after a grace period → treat as a failed source
+            // (bad URL, dead link, TLS chain error) rather than an endless black screen.
+            if (!hasPlayed && !playbackError) {
+                stalled += 500
+                if (stalled >= 15_000) playbackError = true
+            } else {
+                stalled = 0
             }
             delay(500)
         }
@@ -198,7 +243,8 @@ fun PlayerScreen(
     }
 
     // Keep focus where it belongs as the UI state changes.
-    LaunchedEffect(controlsVisible, panel) {
+    LaunchedEffect(controlsVisible, panel, playbackError) {
+        if (playbackError) return@LaunchedEffect // error overlay owns focus
         runCatching {
             when {
                 panel != Panel.NONE -> panelFocus.requestFocus()
@@ -254,6 +300,53 @@ fun PlayerScreen(
             },
         )
 
+        // Buffering: content is loading but hasn't started and hasn't failed.
+        if (!hasPlayed && !playbackError) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    "Loading…",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                )
+            }
+        }
+
+        // Hard failure: give the user something to do instead of a black screen.
+        if (playbackError) {
+            LaunchedEffect(Unit) { runCatching { errorFocus.requestFocus() } }
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xE6000000))
+                    .padding(48.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    "Couldn't play this source",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White,
+                )
+                Text(
+                    "Try another source, check the box's date & time (set it to Automatic), " +
+                        "or turn on Settings → Connection → Allow insecure connections.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xCCFFFFFF),
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.padding(top = 24.dp),
+                ) {
+                    com.dionysus.tv.ui.components.AppButton(
+                        onClick = { retryCount++ },
+                        modifier = Modifier.focusRequester(errorFocus),
+                    ) { Text("Retry") }
+                    com.dionysus.tv.ui.components.AppButton(onClick = onBack) { Text("Back") }
+                }
+            }
+        }
+
         // Secondary panels (audio/subtitle/speed/aspect/sync).
         if (panel != Panel.NONE) {
             OptionsPanel(
@@ -274,7 +367,7 @@ fun PlayerScreen(
             )
         }
 
-        if (controlsVisible) {
+        if (controlsVisible && !playbackError) {
             PlayerControls(
                 title = viewModel.title,
                 isPlaying = isPlaying,

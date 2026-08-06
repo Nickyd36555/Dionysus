@@ -101,6 +101,7 @@ fun DionysusApp(navController: NavHostController = rememberNavController()) {
                     navController.navigate(Routes.streams(mediaId, season, episode))
                 },
                 onBack = { navController.popBackStack() },
+                onOpenDetail = { navController.navigate(Routes.detail(it)) },
             )
         }
 

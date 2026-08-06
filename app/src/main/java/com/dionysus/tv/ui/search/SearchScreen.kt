@@ -126,9 +126,10 @@ fun SearchScreen(
                     }
                     section("✨ Similar picks (AI)", picks, open)
                 }
-                if (filter == SearchFilter.ALL || filter == SearchFilter.LIVE) liveSection("On Live TV", live, open)
+                // Always ordered Movies → TV Shows → Live TV.
                 if (filter == SearchFilter.ALL || filter == SearchFilter.MOVIES) section("Movies", movies, open)
                 if (filter == SearchFilter.ALL || filter == SearchFilter.TV) section("TV Shows", shows, open)
+                if (filter == SearchFilter.ALL || filter == SearchFilter.LIVE) liveSection("On Live TV", live, open)
             }
         }
     }

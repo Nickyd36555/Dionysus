@@ -40,16 +40,38 @@ object NetworkModule {
                 HttpLoggingInterceptor.Level.NONE
             }
         }
-        // The trust manager is strict by default and only relaxes the cert-chain
-        // check when the user opts into "Allow insecure connections" (Settings).
-        val trustManager = LenientTrustManager(settings)
-        return OkHttpClient.Builder()
+        val builder = OkHttpClient.Builder()
             .addInterceptor(logging)
-            .sslSocketFactory(trustManager.socketFactory(), trustManager)
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .callTimeout(60, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
-            .build()
+
+        // Default: the completely stock TLS stack (no custom factory) — no risk to
+        // normal HTTPS. Only when the user turns on "Allow insecure connections"
+        // (Settings → Connection) do we install a trust-all factory to get past
+        // "chain validation failed". Read once at startup; toggling needs a restart.
+        val allowInsecure = runCatching {
+            kotlinx.coroutines.runBlocking { settings.currentAllowInsecureTls() }
+        }.getOrDefault(false)
+        if (allowInsecure) {
+            applyInsecureTls(builder)
+        }
+        return builder.build()
+    }
+
+    /** Accept-all TLS (cert chain + hostname). Used only behind the opt-in toggle. */
+    private fun applyInsecureTls(builder: OkHttpClient.Builder) {
+        runCatching {
+            val trustAll = object : javax.net.ssl.X509TrustManager {
+                override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+                override fun checkServerTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+                override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
+            }
+            val ctx = javax.net.ssl.SSLContext.getInstance("TLS")
+            ctx.init(null, arrayOf<javax.net.ssl.TrustManager>(trustAll), java.security.SecureRandom())
+            builder.sslSocketFactory(ctx.socketFactory, trustAll)
+            builder.hostnameVerifier { _, _ -> true }
+        }
     }
 }
