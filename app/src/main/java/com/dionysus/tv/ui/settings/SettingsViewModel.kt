@@ -35,6 +35,7 @@ data class SettingsUiState(
     val tmdbKey: String = "",
     val omdbKey: String = "",
     val anthropicKey: String = "",
+    val allowInsecure: Boolean = false,
     val premiumizeKey: String = "",
     val orionKey: String = "",
     val torrentioUrl: String = "",
@@ -260,6 +261,7 @@ class SettingsViewModel @Inject constructor(
             tmdbKey = settings.currentTmdbApiKey().orEmpty(),
             omdbKey = settings.currentOmdbApiKey(),
             anthropicKey = settings.currentAnthropicApiKey().orEmpty(),
+            allowInsecure = settings.currentAllowInsecureTls(),
             featuredSource = settings.currentFeaturedSource(),
             downloadFolder = settings.currentDownloadFolderUri(),
             epgOffsetMinutes = settings.currentEpgOffsetMinutes(),
@@ -306,6 +308,11 @@ class SettingsViewModel @Inject constructor(
     fun setAnthropicKey(value: String) = update(value) {
         _state.value = _state.value.copy(anthropicKey = it)
         viewModelScope.launch { settings.setAnthropicApiKey(it) }
+    }
+
+    fun setAllowInsecure(enabled: Boolean) {
+        _state.value = _state.value.copy(allowInsecure = enabled)
+        viewModelScope.launch { settings.setAllowInsecureTls(enabled) }
     }
 
     fun setPremiumizeKey(value: String) = update(value) {

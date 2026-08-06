@@ -45,6 +45,7 @@ class SettingsRepository @Inject constructor(
         val GUIDE_TIMEZONE = stringPreferencesKey("guide_timezone")
         val AUTO_GUIDE_TIME = booleanPreferencesKey("auto_guide_time")
         val LIVE_DEFAULT_CATEGORY = stringPreferencesKey("live_default_category")
+        val ALLOW_INSECURE_TLS = booleanPreferencesKey("allow_insecure_tls")
         val ENABLED_SCRAPERS = stringSetPreferencesKey("enabled_scrapers")
         val ONLY_CACHED = booleanPreferencesKey("only_cached")
     }
@@ -88,6 +89,13 @@ class SettingsRepository @Inject constructor(
 
     /** The category Live TV opens on ("" = All Channels / last used). */
     val liveDefaultCategory: Flow<String> = context.dataStore.data.map { it[Keys.LIVE_DEFAULT_CATEGORY] ?: "" }
+
+    /**
+     * When on, HTTPS requests don't fail on a bad/incomplete certificate chain
+     * (fixes "chain validation failed" on boxes with a wrong clock or providers
+     * with misconfigured certs). Off by default — it lowers connection security.
+     */
+    val allowInsecureTls: Flow<Boolean> = context.dataStore.data.map { it[Keys.ALLOW_INSECURE_TLS] ?: false }
 
     /** When true, only sources already cached on a debrid service are shown. */
     val onlyCached: Flow<Boolean> =
@@ -147,6 +155,10 @@ class SettingsRepository @Inject constructor(
     suspend fun currentAutoGuideTime(): Boolean = autoGuideTime.first()
     suspend fun setLiveDefaultCategory(value: String) = put(Keys.LIVE_DEFAULT_CATEGORY, value)
     suspend fun currentLiveDefaultCategory(): String = liveDefaultCategory.first()
+    suspend fun setAllowInsecureTls(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.ALLOW_INSECURE_TLS] = enabled }
+    }
+    suspend fun currentAllowInsecureTls(): Boolean = allowInsecureTls.first()
 
     suspend fun setOnlyCached(enabled: Boolean) {
         context.dataStore.edit { it[Keys.ONLY_CACHED] = enabled }

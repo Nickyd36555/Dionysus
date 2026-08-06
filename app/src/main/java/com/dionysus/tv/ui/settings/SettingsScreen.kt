@@ -209,6 +209,24 @@ fun SettingsScreen(
             )
         }
 
+        // ---- Connection ----------------------------------------------------
+        item { SectionHeader("Connection") }
+        item {
+            ToggleRow(
+                label = "Allow insecure connections (fixes \"chain validation failed\")",
+                enabled = state.allowInsecure,
+                onToggle = viewModel::setAllowInsecure,
+            )
+        }
+        item {
+            Text(
+                "Turn this on if movies/catalog fail with a certificate error while Live TV still works. That usually means this box's clock is wrong or a provider's HTTPS certificate is misconfigured. It relaxes certificate checks for content connections, so leave it off unless you need it.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth(0.85f).padding(bottom = 4.dp),
+            )
+        }
+
         // ---- Scrapers ------------------------------------------------------
         item { SectionHeader("Scrapers") }
         item {

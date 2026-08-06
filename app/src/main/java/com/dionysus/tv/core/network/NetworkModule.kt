@@ -1,6 +1,7 @@
 package com.dionysus.tv.core.network
 
 import com.dionysus.tv.BuildConfig
+import com.dionysus.tv.data.settings.SettingsRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -31,7 +32,7 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient {
+    fun provideOkHttpClient(settings: SettingsRepository): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
             level = if (BuildConfig.DEBUG) {
                 HttpLoggingInterceptor.Level.BASIC
@@ -39,8 +40,12 @@ object NetworkModule {
                 HttpLoggingInterceptor.Level.NONE
             }
         }
+        // The trust manager is strict by default and only relaxes the cert-chain
+        // check when the user opts into "Allow insecure connections" (Settings).
+        val trustManager = LenientTrustManager(settings)
         return OkHttpClient.Builder()
             .addInterceptor(logging)
+            .sslSocketFactory(trustManager.socketFactory(), trustManager)
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .callTimeout(60, TimeUnit.SECONDS)
