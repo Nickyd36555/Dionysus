@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
@@ -91,7 +92,12 @@ fun StreamsScreen(
                     contentPadding = PaddingValues(top = 20.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(sorted, key = { it.title + it.provider + (it.infoHash ?: "") }) { source ->
+                    // Index-prefixed key: two direct sources can share title+provider with no
+                    // infoHash, and a duplicate key would crash the list. The index makes it unique.
+                    itemsIndexed(
+                        sorted,
+                        key = { i, s -> "$i:${s.title}:${s.provider}:${s.infoHash ?: ""}" },
+                    ) { _, source ->
                         SourceRow(
                             source = source,
                             onPlay = { viewModel.play(source) },

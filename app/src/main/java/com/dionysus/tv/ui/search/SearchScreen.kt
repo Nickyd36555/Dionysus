@@ -109,6 +109,25 @@ fun SearchScreen(
             val movies = results.filter { it.source != MediaSource.LIVE_TV && it.type == MediaType.MOVIE }
             val shows = results.filter { it.source != MediaSource.LIVE_TV && it.type == MediaType.TV_SHOW }
             val aiVisible = filter != SearchFilter.LIVE
+            // Every id must be unique across the WHOLE grid — the sections share one grid, so
+            // a title that appears both as an AI pick and in the catalog would collide on its
+            // key and crash the grid. Dedup once (in render order) so each item lands in the
+            // first section that holds it; computed in a remember so it's stable per data set.
+            val sec = remember(results, aiResults, filter) {
+                val seen = HashSet<String>()
+                fun take(list: List<MediaItem>) = list.filter { seen.add(it.id) }
+                val aiPicks = if (aiVisible) when (filter) {
+                    SearchFilter.MOVIES -> aiResults.filter { it.type == MediaType.MOVIE }
+                    SearchFilter.TV -> aiResults.filter { it.type == MediaType.TV_SHOW }
+                    else -> aiResults
+                } else emptyList()
+                mapOf(
+                    "ai" to take(aiPicks),
+                    "movies" to if (filter == SearchFilter.ALL || filter == SearchFilter.MOVIES) take(movies) else emptyList(),
+                    "shows" to if (filter == SearchFilter.ALL || filter == SearchFilter.TV) take(shows) else emptyList(),
+                    "live" to if (filter == SearchFilter.ALL || filter == SearchFilter.LIVE) take(live) else emptyList(),
+                )
+            }
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(124.dp),
                 contentPadding = PaddingValues(top = 20.dp, bottom = 24.dp),
@@ -118,18 +137,12 @@ fun SearchScreen(
                 // AI "Similar To" picks lead the list when present.
                 if (aiVisible && aiLoading) fullWidth("✨  Finding similar titles with AI…")
                 if (aiVisible && !aiLoading && aiMessage != null) fullWidth("✨  ${aiMessage}")
-                if (aiVisible && aiResults.isNotEmpty()) {
-                    val picks = when (filter) {
-                        SearchFilter.MOVIES -> aiResults.filter { it.type == MediaType.MOVIE }
-                        SearchFilter.TV -> aiResults.filter { it.type == MediaType.TV_SHOW }
-                        else -> aiResults
-                    }
-                    section("✨ Similar picks (AI)", picks, open)
-                }
-                // Always ordered Movies → TV Shows → Live TV.
-                if (filter == SearchFilter.ALL || filter == SearchFilter.MOVIES) section("Movies", movies, open)
-                if (filter == SearchFilter.ALL || filter == SearchFilter.TV) section("TV Shows", shows, open)
-                if (filter == SearchFilter.ALL || filter == SearchFilter.LIVE) liveSection("On Live TV", live, open)
+                // section()/liveSection() early-return when empty, so calling unconditionally
+                // is fine. Order stays Movies → TV Shows → Live TV.
+                section("✨ Similar picks (AI)", sec.getValue("ai"), open)
+                section("Movies", sec.getValue("movies"), open)
+                section("TV Shows", sec.getValue("shows"), open)
+                liveSection("On Live TV", sec.getValue("live"), open)
             }
         }
     }

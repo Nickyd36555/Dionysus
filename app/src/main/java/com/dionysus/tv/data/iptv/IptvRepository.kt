@@ -280,6 +280,9 @@ class IptvRepository @Inject constructor(
         defs.map { pl -> async { runCatching { channelsFor(pl) }.getOrElse { emptyList() } } }
             .awaitAll()
             .flatten()
+            // Guarantee unique ids: providers sometimes return the same stream twice, and
+            // a duplicate id crashes the guide/channel lazy lists mid-scroll.
+            .distinctBy { it.id }
     }
 
     private suspend fun fetchAllVod(defs: List<StoredPlaylist>): List<MediaItem> = coroutineScope {
@@ -287,6 +290,7 @@ class IptvRepository @Inject constructor(
             .map { pl -> async { runCatching { loadXtreamVod(pl) }.getOrElse { emptyList() } } }
             .awaitAll()
             .flatten()
+            .distinctBy { it.id }
     }
 
     private suspend fun loadXtreamVod(pl: StoredPlaylist): List<MediaItem> {

@@ -38,8 +38,13 @@ object M3uParser {
                 else -> {
                     val p = pending
                     if (p != null) {
+                        // Key must be unique per entry: IPTV playlists reuse tvg-id across
+                        // quality variants (CNN HD / CNN FHD both tvg-id="CNN"), and even the
+                        // stream URL can repeat — a colliding id crashes the lazy list on
+                        // scroll. The index guarantees uniqueness; EPG still matches on the
+                        // separate epgId field, so nothing downstream breaks.
                         channels += Channel(
-                            id = "$playlistId|${p.epgId ?: line}",
+                            id = "$playlistId|${channels.size}|${p.epgId ?: ""}",
                             name = p.name.ifBlank { "Channel ${channels.size + 1}" },
                             streamUrl = line,
                             logo = p.logo,
