@@ -1,188 +1,194 @@
-# Dionysus — Admin-Controlled Multi-User Logins (Design)
+# Dionysus — Admin-Controlled Multi-User Logins (Design + Locked Decisions)
 
-**Status:** Design proposal for review (no code yet)
-**Author:** Claude Code
-**Goal:** Let one admin (you) provision and control every user's login to Dionysus. Users sign in with credentials you issue, they **cannot** change their own credentials or settings, and when something breaks you fix it on your end against that user's "key."
-
----
-
-## 1. What you asked for
-
-> "I need to be able to be an admin. I control logins for everyone on the Dionysus. I enter the credentials on my end and they get a login. They cannot change creds or anything like that. Any time an issue comes up, I get to fix it on my end, on their key. Is this possible?"
-
-**Yes, it's possible.** Concretely, it means every install of Dionysus stops being a standalone app that stores its own settings and instead **checks in with a server you control**. That server is the source of truth for:
-
-- **Who can log in** (accounts you create).
-- **What each user gets** (their IPTV playlist/Xtream creds, debrid keys, enabled features).
-- **Whether a login still works** (you can disable or reset it instantly).
-
-Today Dionysus has **no backend** — every setting lives on the device. There is nothing central to control. So the one non-negotiable is: **we add a small backend service.** Everything below is about doing that with the least cost and maintenance.
+**Status:** Decisions locked — building. Backend first, then the app.
+**Goal:** One admin (you) provisions and controls every user's login. Users sign in
+with a **username + PIN** you issue, they **cannot** change their own credentials or
+locked settings, and when something breaks you fix it on your end against that user's
+account. When a key is abused you delete it and reissue.
 
 ---
 
-## 2. The core idea: the "user key"
+## 0. Locked decisions
 
-Each user gets a **login key** you generate — think of it like a username + PIN, or a single license code. That key is the anchor for everything:
+| # | Decision | Choice |
+|---|---|---|
+| 1 | Backend host | **Self-hosted on Cloudways** (PHP + MySQL) |
+| 2 | Login identifier | **Username + PIN** |
+| 3 | Managed vs personal | **Managed only** — there is no login-free build |
+| 4 | Device cap | **1 device per key** (configurable constant, default 1) |
+| 5 | Expiry | **None** — accounts live until you disable or delete them |
+| 6 | Admin console | **Custom admin page** ships with the first backend build |
+
+Everything below reflects these choices.
+
+---
+
+## 1. Why a backend at all
+
+Today every Dionysus install stores its own settings on the device — there is nothing
+central to control. To let you own every login, the app must **check in with a server
+you run**. That server is the source of truth for:
+
+- **Who can log in** — accounts you create (username + PIN).
+- **What each user gets** — their IPTV/Xtream creds, debrid key, enabled sections,
+  default Live TV category.
+- **Whether a login still works** — you can disable or delete it instantly, and move a
+  key to a new TV by deauthorizing its device.
+
+## 2. Stack: PHP + MySQL on Cloudways
+
+Cloudways' turnkey stack is PHP-FPM + MySQL/MariaDB behind Nginx/Apache, with
+phpMyAdmin and a public webroot (`public_html`). We deploy by uploading a small set of
+PHP files and pointing them at the auto-provisioned MySQL database — no Node runtime,
+no build step, no framework to patch.
+
+The backend is intentionally **dependency-light**: plain PHP with PDO (prepared
+statements everywhere), `password_hash`/`password_verify` for PINs, `random_bytes`
+tokens, CSRF-protected admin forms, and `htmlspecialchars` on all output. Small enough
+to read top to bottom, which is the right security posture for something you self-host.
 
 ```
-          you (admin console)
-                 │  create / edit / disable
-                 ▼
-        ┌──────────────────────┐
-        │  Backend (accounts)  │   ← source of truth
-        │  key → profile       │
-        └──────────┬───────────┘
-                   │  user logs in with their key
+        you ──▶ /admin  (session-protected console)
+                   │ create / edit / disable / delete users, deauthorize devices
                    ▼
-        ┌──────────────────────┐
-        │  Dionysus on the TV  │   pulls its config, locks settings
-        └──────────────────────┘
+        ┌───────────────────────────┐
+        │  MySQL (source of truth)  │
+        │  users · profiles · devices · admins · tokens │
+        └───────────┬───────────────┘
+                   ▲ │
+     login + sync  │ ▼  (HTTPS, Bearer token)
+        ┌───────────────────────────┐
+        │   Dionysus on the TV       │  username+PIN → token+profile → managed mode
+        └───────────────────────────┘
 ```
 
-- **You create the key**, set the user's password/PIN, and attach their config (IPTV creds, debrid, feature flags, expiry date).
-- **The user logs in** with the key on their TV. The app fetches that user's profile and runs with it.
-- **The user cannot change** their credentials or the locked settings — the app hides/greys those screens when it's in "managed" mode.
-- **When an issue comes up**, you open the admin console, find the user by their key, and fix it — reset their password, swap their IPTV credentials, extend their expiry, or disable them. The change takes effect on their next check-in (and can be pushed near-instantly).
-
 ---
 
-## 3. Recommended architecture
+## 3. Data model (MySQL)
 
-Two realistic ways to build the backend. My recommendation is **Option A (managed backend)** — it's the fastest to ship, cheapest to run at your scale, and gives you an admin console without building one from scratch.
-
-### Option A — Managed backend (recommended): Supabase
-
-[Supabase](https://supabase.com) gives us, out of the box:
-
-- **Auth** — email/username + password accounts you create; sign-in returns a token the app uses.
-- **Postgres database** — the users/profiles tables below.
-- **Auto-generated REST + row-level security** — the app reads only its own profile; nobody can read anyone else's.
-- **A hosted dashboard** — you can create/edit/disable users from Supabase's own table editor on day one, before we even build a custom admin screen.
-
-**Cost:** Free tier covers up to ~50k monthly active users and 500MB DB — almost certainly free for you. Paid tier is **$25/month** if you outgrow it. No servers to maintain.
-
-### Option B — Custom server
-
-A small Node/Go/Python service + Postgres on a VPS (or Cloudflare Workers + D1). Full control, but **you host, patch, back up, and secure it**, and we build the admin console and the auth ourselves. More work and more ongoing responsibility for no benefit at your scale. Only worth it if you specifically want to avoid a third-party host.
-
-**Recommendation: Option A (Supabase).** Everything below assumes it, but the data model and app changes are identical either way.
-
-### What about Firebase?
-
-Also viable (Google's managed auth + Firestore). Supabase is recommended over Firebase here because Postgres + row-level security maps more cleanly to "one admin owns rows, each user reads one row," and its table dashboard doubles as a zero-effort admin console. Not a strong preference — if you'd rather use Firebase, the design carries over.
-
----
-
-## 4. Data model
-
-Three tables (Supabase/Postgres):
+**`admins`** — who can sign into the console
+| column | meaning |
+|---|---|
+| `id` | pk |
+| `username` | unique |
+| `password_hash` | bcrypt (`password_hash`) |
+| `created_at` | |
 
 **`users`** — one row per login you issue
 | column | meaning |
 |---|---|
-| `id` | internal id |
-| `login_key` | the human-facing key/username you hand out (unique) |
+| `id` | pk |
+| `username` | the name you hand out (unique) |
+| `pin_hash` | bcrypt of the PIN — never stored or shown in plain text |
 | `display_name` | e.g. "Living room — John" |
-| `status` | `active` / `disabled` / `expired` |
-| `expires_at` | optional auto-expiry date |
-| `created_at`, `updated_at` | timestamps |
+| `status` | `active` / `disabled` |
+| `created_at`, `updated_at` | |
 
-(The password itself is managed by Supabase Auth, hashed — never stored in plain text, not even you see it; you *set/reset* it, you don't read it.)
+No `expires_at` column — expiry was declined; you disable or delete instead.
 
 **`profiles`** — the config each user runs with (1:1 with `users`)
 | column | meaning |
 |---|---|
-| `user_id` | → users.id |
+| `user_id` | → users.id (unique) |
 | `xtream_host` / `xtream_user` / `xtream_pass` | their IPTV account |
-| `epg_url` | their guide URL |
+| `epg_url` | optional custom guide URL |
 | `debrid_token` | optional debrid key |
-| `feature_flags` | JSON — which sections they can see (VOD, downloads, etc.) |
-| `default_category` | their Live TV landing page |
+| `default_category` | their Live TV landing category |
+| `feature_vod` / `feature_downloads` / `feature_search` | 0/1 section toggles |
 
-**`devices`** (optional, recommended) — one row per TV a key is used on
+**`devices`** — the TV(s) a key is bound to (cap = 1)
 | column | meaning |
 |---|---|
+| `id` | pk |
 | `user_id` | → users.id |
-| `device_id` | the TV's install id |
-| `last_seen_at` | for "is this user online / when did they last check in" |
+| `device_id` | the TV's install id (unique per user) |
+| `device_name` | model/name reported at login |
+| `created_at`, `last_seen_at` | bind time + last check-in |
 
-`devices` lets you **see who's using a key**, cap it to N devices, and spot a shared/leaked key.
-
----
-
-## 5. Login & sync flow (in the app)
-
-1. **First launch** → app shows a **Login screen** (key + password/PIN) instead of the current settings-driven setup.
-2. App sends them to the backend → gets back an **auth token** + the user's **profile**.
-3. App stores the token securely on-device, applies the profile (IPTV creds, flags, default category), and enters **managed mode**.
-4. **On every launch (and periodically)** the app re-validates the token and re-pulls the profile, so your edits propagate. If `status != active` or `expires_at` has passed → the app logs them out and shows "Contact your provider."
-5. **Managed mode locks the UI**: the "add/edit playlist," "credentials," and other owner-only settings screens are hidden or read-only. The user can still use playback preferences (volume, aspect, etc.) — we decide per-setting what's locked vs. personal.
-
-### Near-instant fixes (optional but nice)
-
-A periodic re-pull already lets you fix things (takes effect next check-in). To make a fix land **immediately**, the app can subscribe to its own profile row (Supabase Realtime) — the moment you change it in the console, the TV updates live. Good for "kick a user right now" or "swap their IPTV creds while they're watching."
+**`tokens`** — active device sessions
+| column | meaning |
+|---|---|
+| `token` | opaque 32-byte random (pk) |
+| `user_id` / `device_id` | who/where |
+| `created_at`, `last_seen_at` | |
 
 ---
 
-## 6. The admin side (you)
+## 4. API (consumed by the app)
 
-**Phase 1 — use Supabase's dashboard.** From day one you can create a user, set their password, fill in their profile row, flip `status` to `disabled`, or set `expires_at` — all from Supabase's built-in table editor in a browser. No custom UI needed to get started.
+All JSON over HTTPS. Single entry point `api.php?action=…` so no URL-rewrite config is
+needed on Cloudways.
 
-**Phase 2 — a simple admin web page** (optional, later). A one-page private admin site ("Dionysus Admin") with:
-- **New user** — generates a key, sets password, fills IPTV creds → one button.
-- **User list** — search by key/name, see status, last-seen, device count.
-- **Per-user actions** — reset password, edit IPTV creds, extend expiry, disable/enable, deauthorize a device.
+- **`POST api.php?action=login`** `{ username, pin, device_id, device_name }`
+  → verifies username+PIN and `status=active`; enforces the device cap:
+  - device already bound to this user → refresh `last_seen`, issue token.
+  - new device and user is under the cap → bind it, issue token.
+  - new device and user is at the cap → **reject** `409 device_limit` ("This key is
+    already in use on another TV — ask your provider to reset it").
+  → returns `{ token, profile }`.
+- **`GET api.php?action=profile`** (`Authorization: Bearer <token>`)
+  → re-checks status + token, bumps `last_seen`, returns the current `profile`.
+  Returns `401` (bad/again token) or `403 disabled` so the app can lock out live.
+- **`POST api.php?action=logout`** → deauthorizes the current token.
 
-This is a small build on top of the same backend; we can add it once the core works.
-
-> Note: I will not build an admin console that impersonates a real brand or collects credentials under a false identity — this is your own service for your own users, which is fine. The login screens and admin pages will be plainly "Dionysus."
-
----
-
-## 7. What changes in the Dionysus app
-
-- **New Login screen** (key + password), shown before Home when in managed mode.
-- **Auth client** — talks to the backend, stores/refreshes the token securely (Android EncryptedSharedPreferences / DataStore).
-- **Managed mode** — a flag that, when on, (a) loads config from the backend instead of local settings, and (b) hides/locks the owner-only settings screens.
-- **Profile sync** — pull on launch + periodic + (optional) realtime.
-- **Graceful lockout** — disabled/expired/invalid → clear local data, show a "contact your provider" message.
-- **Build flavor / toggle** — keep a "personal mode" build (today's behavior, no login) if you still want an unmanaged version for yourself, or make managed mode the only mode. Your call.
-
-Nothing about playback, EPG, or scrapers changes — only where the **config** comes from and whether settings are editable.
+The app calls `login` once, then `profile` on every launch and periodically, so your
+edits and disables propagate on the next check-in.
 
 ---
 
-## 8. Security notes
+## 5. Admin console (`admin.php`)
 
-- Passwords are hashed by the auth provider; **even you never see them** — you set and reset, not read. (If you truly want to see PINs, we'd store a separate admin-set PIN, which is less secure — I'd advise against it.)
-- Each user can read **only their own** profile (row-level security). One user can never see another's IPTV creds.
-- IPTV/debrid secrets live server-side and are delivered over HTTPS to the authenticated device only.
-- Device binding + last-seen lets you detect and cut off a shared/leaked key.
-- The app stores its token in Android's encrypted storage, not plain prefs.
+Session-protected, Dionysus-branded (plainly your own service — it impersonates no one
+and collects no third-party credentials). Pages:
+
+- **Sign in** — admin username + password.
+- **Users list** — username, display name, status, bound-device count, last seen; search.
+- **New user** — username, PIN, display name, IPTV host/user/pass, EPG URL, debrid token,
+  default category, section toggles → one submit creates the user + profile.
+- **Edit user** — update any profile field, **reset PIN**, enable/disable, **deauthorize
+  device** (frees the key for a new TV), **delete user**.
+
+CSRF tokens on every form; all writes via POST; output escaped.
 
 ---
 
-## 9. Rough effort & rollout
+## 6. What changes in the app (next build, after the server is deployed)
 
-| Phase | What | Effort |
+- **Login screen** (username + PIN) shown before Home; managed mode is the only mode.
+- **Auth client** — talks to your server, stores the token in Android EncryptedShared
+  Preferences, refreshes on launch + periodically.
+- **Managed mode** — config comes from the server profile, not local settings; the
+  playlist/credentials/owner-only settings screens are hidden. Playback preferences
+  (aspect, speed, audio) stay local/personal.
+- **Graceful lockout** — disabled/invalid → clear local data, show "Contact your
+  provider."
+- **Server URL** — a single configurable base URL (set once to your Cloudways domain).
+
+Playback, EPG, and scrapers are unchanged — only *where config comes from* and *what is
+editable* change.
+
+---
+
+## 7. Security notes
+
+- PINs are bcrypt-hashed; you set/reset them (you always know what you set), the DB never
+  stores them in the clear.
+- Every DB call is a prepared statement (no SQL injection); admin forms are CSRF-guarded.
+- IPTV/debrid secrets live server-side, delivered only to an authenticated device over
+  HTTPS (enable Cloudways' free Let's Encrypt SSL).
+- 1-device binding + last-seen surfaces and stops a shared/leaked key; deauthorize to move.
+- The app keeps its token in encrypted storage, not plain prefs.
+
+---
+
+## 8. Rollout
+
+| Phase | What | State |
 |---|---|---|
-| 0 | Stand up Supabase, create tables, RLS rules | ~half a day |
-| 1 | App: login screen + auth client + profile load + managed-mode lock | the bulk of the work |
-| 2 | App: periodic/realtime sync + graceful lockout | small |
-| 3 | Admin: use Supabase dashboard (no build) | none |
-| 4 | Admin: custom one-page admin site | optional, later |
+| 0 | Backend: schema + API + admin console + Cloudways deploy guide | **this build** |
+| 1 | You deploy to Cloudways, create your admin + first user | you, ~30 min |
+| 2 | App: login screen + auth client + managed-mode lock + lockout | next build |
+| 3 | App: periodic sync polish | follow-up |
 
-We can ship Phases 0–2 first and run the admin side from the Supabase dashboard, then add the pretty admin page once it's proven.
-
----
-
-## 10. Decisions I need from you before building
-
-1. **Backend host:** Supabase (recommended), Firebase, or self-hosted?
-2. **Login identifier:** a single **license key**, or **username + PIN**? (Key is simplest to hand out; username+PIN is friendlier.)
-3. **Managed vs. personal:** should managed mode be the only mode, or keep a login-free "personal" build for yourself?
-4. **Device cap:** limit each key to N TVs? (Recommended — stops key sharing.)
-5. **Expiry:** do you want per-user expiry dates (e.g. monthly), or accounts that stay until you disable them?
-6. **Admin console:** start on the Supabase dashboard, or do you want the custom admin page as part of the first build?
-
-Once you answer these, I'll turn this into an implementation plan and start on Phase 0/1.
+The Phase 0 backend does not touch the current app — the existing APK keeps working
+until Phase 2 ships the login.
