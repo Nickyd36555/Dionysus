@@ -59,6 +59,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -273,6 +274,23 @@ fun PlayerScreen(
             .focusable()
             .pointerInput(Unit) {
                 detectTapGestures { controlsVisible = !controlsVisible; interaction++ }
+            }
+            // Seen before children: keeps the control bar alive and reachable. Any
+            // press resets the auto-hide timer (so it can't vanish mid-navigation);
+            // the first press while hidden reveals the bar and moves focus into it.
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                if (event.key == Key.Back) return@onPreviewKeyEvent false // leave Back to BackHandler
+                if (playbackError) return@onPreviewKeyEvent false          // error overlay owns input
+                val wasHidden = !controlsVisible
+                controlsVisible = true
+                interaction++ // reset the 6s auto-hide countdown on every key
+                if (wasHidden && panel == Panel.NONE) {
+                    runCatching { barFocus.requestFocus() }
+                    true // consume: first press only reveals + enters the bar
+                } else {
+                    false // pass through to the focused control
+                }
             }
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false

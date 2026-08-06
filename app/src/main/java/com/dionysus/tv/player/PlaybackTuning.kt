@@ -43,18 +43,25 @@ object PlaybackTuning {
 
     /** LibVLC init options tuned to the device tier. */
     fun libVlcOptions(tier: Tier, live: Boolean): ArrayList<String> {
+        // A deep buffer absorbs network jitter — the usual cause of stutter on
+        // big 4K/debrid streams. VOD can buffer generously; live keeps it lower to
+        // avoid a long channel-change delay.
+        val netCache = if (live) 5000 else 12000
         val opts = arrayListOf(
-            "--network-caching=3000",
-            "--file-caching=3000",
-            "--live-caching=3000",
-            "--no-drop-late-frames",
-            "--no-skip-frames",
-            "--no-mediacodec-dr",
-            "--no-omxil-dr",
+            "--network-caching=$netCache",
+            "--file-caching=$netCache",
+            "--live-caching=${if (live) 5000 else 12000}",
+            // Let VLC drop/skip a late frame instead of falling behind and lagging
+            // audio — real-time playback stays smooth on constrained boxes. (The old
+            // --no-drop-late-frames/--no-skip-frames forced every frame and caused
+            // cumulative lag.)
             "--audio-time-stretch",
             "--audio-resampler=soxr",   // high-quality audio resampling
             "--deinterlace=-1",         // auto: only engages on interlaced sources
         )
+        // NOTE: hardware "direct rendering" (MediaCodec/OMX) is left ENABLED — it is
+        // the lightest 4K path. The previous --no-*-dr flags disabled it and forced a
+        // slow copy, which stuttered on high-bitrate HEVC.
         when (tier) {
             Tier.HIGH -> opts += "--deinterlace-mode=yadif2x"
             Tier.MEDIUM -> opts += "--deinterlace-mode=yadif"
