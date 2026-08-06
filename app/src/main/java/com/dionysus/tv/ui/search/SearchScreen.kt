@@ -72,7 +72,17 @@ fun SearchScreen(
             .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 48.dp, vertical = 32.dp),
     ) {
-        SearchField(value = query, onValueChange = viewModel::onQueryChange)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(Modifier.weight(1f)) {
+                SearchField(value = query, onValueChange = viewModel::onQueryChange)
+            }
+            // Prominent, always-visible AI "Similar To" action next to the search box.
+            AiSimilarButton(
+                loading = aiLoading,
+                enabled = query.trim().length >= 2,
+                onClick = viewModel::aiSimilarSearch,
+            )
+        }
 
         Row(
             modifier = Modifier.padding(top = 16.dp),
@@ -82,11 +92,6 @@ fun SearchScreen(
             SearchFilter.entries.forEach { f ->
                 FilterPill(label = f.label, selected = filter == f, onClick = { filter = f })
             }
-            AiSimilarButton(
-                loading = aiLoading,
-                enabled = query.trim().length >= 2,
-                onClick = viewModel::aiSimilarSearch,
-            )
         }
 
         val nothing = results.isEmpty() && aiResults.isEmpty() && !aiLoading &&
@@ -141,32 +146,30 @@ private fun LazyGridScope.fullWidth(text: String) {
     }
 }
 
-/** Pill that kicks off an AI "Similar To" search on the current query. */
+/** Prominent button that kicks off an AI "Similar To" search on the current query. */
 @Composable
 private fun AiSimilarButton(loading: Boolean, enabled: Boolean, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    val shape = RoundedCornerShape(20.dp)
+    val shape = RoundedCornerShape(14.dp)
     val active = enabled && !loading
+    // Filled and coloured so it's unmistakable; dimmed (not hidden) when inactive.
     val bg = when {
-        focused && active -> MaterialTheme.colorScheme.primary
-        else -> MaterialTheme.colorScheme.surfaceVariant
-    }
-    val fg = when {
-        !active -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+        !active -> MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
         focused -> MaterialTheme.colorScheme.onPrimary
         else -> MaterialTheme.colorScheme.primary
     }
+    val fg = if (focused && active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onPrimary
     Text(
         text = if (loading) "✨ Finding…" else "✨ Similar (AI)",
-        style = MaterialTheme.typography.titleSmall,
+        style = MaterialTheme.typography.titleMedium,
         color = fg,
         modifier = Modifier
             .clip(shape)
             .background(bg)
-            .then(if (active && !focused) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, shape) else Modifier)
+            .then(if (focused && active) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape) else Modifier)
             .clickable(interactionSource = interaction, indication = null, enabled = active, onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 8.dp),
+            .padding(horizontal = 22.dp, vertical = 16.dp),
     )
 }
 

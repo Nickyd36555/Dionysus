@@ -31,8 +31,8 @@ android {
         targetSdk = 34
         // CI overrides these from the pushed tag so the APK's version matches
         // the GitHub Release the in-app updater compares against.
-        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 332
-        versionName = System.getenv("VERSION_NAME") ?: "0.6.2"
+        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 333
+        versionName = System.getenv("VERSION_NAME") ?: "0.6.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
