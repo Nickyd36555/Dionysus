@@ -210,8 +210,10 @@ private fun LiveView(
     // Immersive full-screen guide: after 5s of no input, hide BOTH the category
     // rail and the app's nav rail so the guide fills the screen. Any button press
     // resets the countdown; Back (or Left on the first channel) brings them back.
+    // Returning from a channel starts immersive immediately, so no menu ever pops
+    // up on the way back — you land straight on the guide, focused on the channel.
     val railController = LocalRailController.current
-    var immersive by remember { mutableStateOf(false) }
+    var immersive by remember { mutableStateOf(returningToGuide) }
     var interactionTick by remember { mutableIntStateOf(0) }
     LaunchedEffect(immersive) { railController.setHidden(immersive) }
     LaunchedEffect(immersive, interactionTick) {
