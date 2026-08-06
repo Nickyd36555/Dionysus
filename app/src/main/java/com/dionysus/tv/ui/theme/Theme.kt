@@ -6,17 +6,20 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
 
 private val DionysusColorScheme = darkColorScheme(
-    primary = DionysusPurple,
-    onPrimary = Color.White,
-    primaryContainer = DionysusPurpleLight,
-    secondary = DionysusPurpleLight,
+    primary = DionysusGold,
+    onPrimary = DionysusOnGold,
+    primaryContainer = DionysusGoldBright,
+    secondary = DionysusGoldBright,
+    onSecondary = DionysusOnGold,
     background = DionysusBackground,
     onBackground = DionysusOnSurface,
     surface = DionysusSurface,
     onSurface = DionysusOnSurface,
     surfaceVariant = DionysusSurfaceVariant,
     onSurfaceVariant = DionysusOnSurfaceVariant,
+    border = DionysusOutline,
     error = DionysusError,
+    onError = Color.White,
 )
 
 /** Root theme for the app. TV apps are dark-first, so there is only one scheme. */

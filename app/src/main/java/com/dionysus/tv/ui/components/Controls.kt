@@ -35,7 +35,14 @@ import androidx.tv.material3.MaterialTheme
  * emulator. These wrappers use foundation `Modifier.clickable`, which fires on
  * BOTH a tap and a focused D-pad/Enter press, and keeps a visible focus
  * highlight for remote navigation. Styling mirrors the TV components.
+ *
+ * Shared "Wine & Gold, sharp & architectural" tokens: small corner radius, thin
+ * hairline borders, gold fills with dark text.
  */
+
+private val CornerSharp = 3.dp
+private val Hairline = 1.dp
+private val HairlineFocus = 1.5.dp
 
 /** Filled primary button. Drop-in for tv-material3 `Button`. */
 @Composable
@@ -49,19 +56,25 @@ fun AppButton(
     val focused by interaction.collectIsFocusedAsState()
     val pressed by interaction.collectIsPressedAsState()
     val base = MaterialTheme.colorScheme.primary
+    // Focused = brighter gold fill so the button clearly reads as selected on a TV;
+    // pressed dims slightly; disabled fades.
     val bg = when {
-        !enabled -> base.copy(alpha = 0.4f)
-        pressed -> base.copy(alpha = 0.8f)
+        !enabled -> base.copy(alpha = 0.35f)
+        pressed -> base.copy(alpha = 0.82f)
+        focused -> MaterialTheme.colorScheme.primaryContainer
         else -> base
     }
-    val shape = RoundedCornerShape(8.dp)
+    val shape = RoundedCornerShape(CornerSharp)
     Row(
         modifier = modifier
             .clip(shape)
             .background(bg)
-            .then(if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.onPrimary, shape) else Modifier)
+            .then(
+                if (focused) Modifier.border(HairlineFocus, MaterialTheme.colorScheme.onSurface, shape)
+                else Modifier,
+            )
             .clickable(enabled = enabled, interactionSource = interaction, indication = null) { onClick() }
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = 22.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
@@ -76,16 +89,19 @@ fun AppButton(
 fun AppSurface(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(12.dp),
+    shape: Shape = RoundedCornerShape(CornerSharp),
     content: @Composable () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
+    // Thin gold hairline at rest; brighter, slightly thicker gold on focus.
+    val borderColor = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.border
+    val borderWidth = if (focused) HairlineFocus else Hairline
     Column(
         modifier = modifier
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .then(if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape) else Modifier)
+            .border(borderWidth, borderColor, shape)
             .clickable(interactionSource = interaction, indication = null) { onClick() },
     ) {
         CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
@@ -106,18 +122,24 @@ fun AppListItem(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    val shape = RoundedCornerShape(8.dp)
+    val shape = RoundedCornerShape(CornerSharp)
     val bg = when {
         focused -> MaterialTheme.colorScheme.primary
         selected -> MaterialTheme.colorScheme.surfaceVariant
         else -> androidx.compose.ui.graphics.Color.Transparent
     }
+    // A thin gold marker on the selected (not-focused) row, so the current choice
+    // stays legible even when focus is elsewhere.
     val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
             .background(bg)
+            .then(
+                if (selected && !focused) Modifier.border(Hairline, MaterialTheme.colorScheme.primary, shape)
+                else Modifier,
+            )
             .clickable(interactionSource = interaction, indication = null) { onClick() }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,

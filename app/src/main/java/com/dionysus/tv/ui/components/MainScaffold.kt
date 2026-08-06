@@ -127,7 +127,7 @@ private fun NavRailImage(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(6.dp)
     Box(
         modifier = Modifier
             .size(52.dp)
@@ -148,7 +148,7 @@ private fun NavRailImage(
             model = imageRes,
             contentDescription = label,
             contentScale = ContentScale.Fit,
-            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)),
+            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(5.dp)),
         )
     }
 }
@@ -162,7 +162,7 @@ private fun NavRailIcon(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(6.dp)
     val bg = when {
         focused -> MaterialTheme.colorScheme.primary
         selected -> MaterialTheme.colorScheme.surfaceVariant

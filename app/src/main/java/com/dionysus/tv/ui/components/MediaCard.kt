@@ -60,7 +60,8 @@ fun MediaCard(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    val shape = RoundedCornerShape(10.dp)
+    // Sharp, architectural corner + a gold focus edge to match the theme.
+    val shape = RoundedCornerShape(4.dp)
     Column(
         modifier = modifier
             .width(CardWidth)
@@ -78,7 +79,7 @@ fun MediaCard(
                 .height(PosterHeight)
                 .clip(shape)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                .then(if (focused) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, shape) else Modifier),
+                .then(if (focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape) else Modifier),
         ) {
             if (item.posterUrl != null) {
                 AsyncImage(
