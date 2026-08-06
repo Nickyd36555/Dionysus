@@ -5,7 +5,9 @@ package com.dionysus.tv.ui.streams
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +35,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -41,6 +47,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.dionysus.tv.core.model.StreamSource
+import com.dionysus.tv.ui.theme.DionysusGold
+import com.dionysus.tv.ui.theme.DionysusGoldBright
+import com.dionysus.tv.ui.theme.DionysusGoldDeep
+import com.dionysus.tv.ui.theme.DionysusOnGold
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -171,30 +181,43 @@ private fun SourceRow(source: StreamSource, onPlay: () -> Unit, onDownload: () -
     }
 }
 
-/** Sleek, rectangular action button — filled (primary) or outlined. */
+/**
+ * Embossed metallic action button, matching the app's 3D gold buttons.
+ * PLAY (filled) is always a raised gold plate; DOWNLOAD (outlined) is a gold
+ * frame at rest that fills into the same plate — and lifts — when focused.
+ */
 @Composable
 private fun ActionButton(
     label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     filled: Boolean,
     onClick: () -> Unit,
 ) {
-    val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
+    val pressed by interaction.collectIsPressedAsState()
     val shape = RoundedCornerShape(3.dp)
-    val primary = MaterialTheme.colorScheme.primary
-    val bg = when {
-        focused -> primary
-        filled -> primary.copy(alpha = 0.9f)
-        else -> androidx.compose.ui.graphics.Color.Transparent
+    val plated = filled || focused
+    val fill = when {
+        pressed && plated -> Brush.verticalGradient(listOf(DionysusGoldDeep, DionysusGold)) // inset
+        focused -> Brush.verticalGradient(listOf(DionysusGoldBright, DionysusGold))          // lifted
+        filled -> Brush.verticalGradient(listOf(DionysusGold, DionysusGoldDeep))             // raised plate
+        else -> Brush.verticalGradient(listOf(Color.Transparent, Color.Transparent))         // outlined
     }
-    val fg = if (filled || focused) MaterialTheme.colorScheme.onPrimary else primary
+    val bevel = Brush.verticalGradient(listOf(DionysusGoldBright, DionysusGoldDeep))
+    val fg = if (plated) DionysusOnGold else DionysusGold
     Row(
         modifier = Modifier
+            .shadow(
+                elevation = if (!plated) 0.dp else if (focused) 10.dp else 4.dp,
+                shape = shape,
+                spotColor = DionysusGold,
+                ambientColor = Color.Black,
+            )
             .clip(shape)
-            .background(bg)
-            .border(1.dp, if (focused) MaterialTheme.colorScheme.onPrimary else primary.copy(alpha = 0.7f), shape)
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .background(fill)
+            .border(1.5.dp, bevel, shape) // beveled metallic frame
             .padding(horizontal = 16.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
