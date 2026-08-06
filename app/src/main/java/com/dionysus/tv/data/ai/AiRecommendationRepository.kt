@@ -8,9 +8,11 @@ import com.dionysus.tv.data.settings.SettingsRepository
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -65,20 +67,34 @@ class AiRecommendationRepository @Inject constructor(
         }
         val list = when (suggestions) {
             is DataResult.Success -> suggestions.data
-            is DataResult.Error -> return DataResult.Error("AI recommendation failed: ${suggestions.message}")
+            is DataResult.Error -> return DataResult.Error("AI request failed: ${suggestions.message}")
         }
-        // Resolve each suggested title to a real MediaItem (with poster) via TMDB.
-        val resolved = coroutineScope {
-            list.filter { it.title.lowercase() !in exclude }
-                .map { s -> async { resolve(s) } }
-                .awaitAll()
+        val filtered = list.filter { it.title.isNotBlank() && it.title.lowercase() !in exclude }
+        if (filtered.isEmpty()) {
+            return DataResult.Error("The AI didn't return any recommendations — try again.")
         }
-        return DataResult.Success(resolved.filterNotNull().distinctBy { it.id })
+        // Resolve each suggested title to a real card via TMDB. Track lookup failures so a
+        // TMDB problem (e.g. no API key) surfaces as an actionable message instead of a
+        // misleading "no matches" — the AI's answer isn't the thing that failed.
+        val searched = coroutineScope {
+            filtered.map { s -> async { s to metadata.search(s.title) } }.awaitAll()
+        }
+        val anyLookupError = searched.any { it.second is DataResult.Error }
+        val resolved = searched
+            .mapNotNull { (s, r) -> pickBest(r.getOrNull().orEmpty(), s) }
+            .distinctBy { it.id }
+        return when {
+            resolved.isNotEmpty() -> DataResult.Success(resolved)
+            anyLookupError -> DataResult.Error(
+                "Couldn't look up the AI's picks. Add a TMDB API key in Settings → " +
+                    "Metadata so recommendations can show as cards.",
+            )
+            else -> DataResult.Success(emptyList()) // AI answered, TMDB searched, no card matched
+        }
     }
 
     /** Pick the TMDB result that best matches the AI's title/year/type. */
-    private suspend fun resolve(s: Suggestion): MediaItem? {
-        val hits = metadata.search(s.title).getOrNull().orEmpty()
+    private fun pickBest(hits: List<MediaItem>, s: Suggestion): MediaItem? {
         if (hits.isEmpty()) return null
         val wantType = if (s.type.equals("tv", ignoreCase = true)) MediaType.TV_SHOW else MediaType.MOVIE
         return hits.firstOrNull { it.type == wantType && (s.year == null || it.year == s.year) }
@@ -87,19 +103,32 @@ class AiRecommendationRepository @Inject constructor(
             ?: hits.first()
     }
 
+    /**
+     * Parse the model's JSON array leniently. Reads each field by hand so a common
+     * deviation — a quoted year ("2006") or a stray field — doesn't blow up the whole
+     * decode (which previously silently yielded zero suggestions).
+     */
     private fun parseSuggestions(text: String): List<Suggestion> {
         val start = text.indexOf('[')
         val end = text.lastIndexOf(']')
         if (start < 0 || end <= start) return emptyList()
-        val arr = text.substring(start, end + 1)
-        return runCatching { json.decodeFromString<List<Suggestion>>(arr) }.getOrDefault(emptyList())
+        val arr = runCatching { json.parseToJsonElement(text.substring(start, end + 1)).jsonArray }
+            .getOrNull() ?: return emptyList()
+        return arr.mapNotNull { el ->
+            val o = el as? JsonObject ?: return@mapNotNull null
+            val title = o["title"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+            if (title.isBlank()) return@mapNotNull null
+            val year = o["year"]?.jsonPrimitive?.contentOrNull
+                ?.filter { it.isDigit() }?.take(4)?.toIntOrNull()
+            val type = o["type"]?.jsonPrimitive?.contentOrNull ?: "movie"
+            Suggestion(title, year, type)
+        }
     }
 
-    @Serializable
     private data class Suggestion(
         val title: String = "",
         val year: Int? = null,
-        @SerialName("type") val type: String = "movie",
+        val type: String = "movie",
     )
 
     private companion object {
