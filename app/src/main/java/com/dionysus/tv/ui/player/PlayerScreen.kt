@@ -51,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -294,13 +295,21 @@ fun PlayerScreen(
             }
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
-                // Only handles keys when the control bar isn't focused (controls hidden).
+                // Media-remote transport keys always work.
                 when (event.key) {
-                    Key.DirectionCenter, Key.Enter, Key.Spacebar, Key.MediaPlayPause -> {
-                        if (controlsVisible) togglePlay() else showControls(); true
-                    }
-                    Key.DirectionLeft, Key.MediaRewind -> { seekBy(-10_000); true }
-                    Key.DirectionRight, Key.MediaFastForward -> { seekBy(10_000); true }
+                    Key.MediaPlayPause -> return@onKeyEvent run { togglePlay(); true }
+                    Key.MediaRewind -> return@onKeyEvent run { seekBy(-10_000); true }
+                    Key.MediaFastForward -> return@onKeyEvent run { seekBy(10_000); true }
+                }
+                // While the bar is visible, DO NOT consume the D-pad — the focus system
+                // must be free to move focus into and across the control buttons.
+                // Consuming Down here was exactly why the buttons were unreachable.
+                if (controlsVisible) return@onKeyEvent false
+                // Controls hidden: D-pad reveals them / quick-seeks.
+                when (event.key) {
+                    Key.DirectionCenter, Key.Enter, Key.Spacebar -> { showControls(); true }
+                    Key.DirectionLeft -> { seekBy(-10_000); true }
+                    Key.DirectionRight -> { seekBy(10_000); true }
                     Key.DirectionUp, Key.DirectionDown -> { showControls(); true }
                     else -> false
                 }
@@ -435,6 +444,7 @@ private fun PlayerControls(
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .focusGroup() // makes D-pad traversal into/across the controls reliable
             .background(Color(0xE6000000))
             .padding(horizontal = 40.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
