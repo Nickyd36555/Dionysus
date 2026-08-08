@@ -135,7 +135,9 @@ class HomeViewModel @Inject constructor(
         val featured = featuredItems(featuredKindName, snapshot)
             .ifEmpty { rows.firstOrNull { !it.isContinueWatching }?.items.orEmpty() }
 
-        _state.value = HomeUiState(
+        // copy() (not a fresh HomeUiState) so the separately-collected `tiles` field
+        // isn't wiped every time rows/favorites/downloads change.
+        _state.value = _state.value.copy(
             featured = featured.take(8),
             rows = rows,
             isLoading = false,
