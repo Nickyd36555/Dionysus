@@ -14,6 +14,7 @@ import com.dionysus.tv.data.debrid.DebridRepository
 import com.dionysus.tv.data.local.DownloadStatus
 import com.dionysus.tv.data.local.dao.DownloadDao
 import com.dionysus.tv.data.local.entity.DownloadEntity
+import com.dionysus.tv.data.settings.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
@@ -29,6 +30,7 @@ class DownloadRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val downloadDao: DownloadDao,
     private val debridRepository: DebridRepository,
+    private val settings: SettingsRepository,
 ) {
     private fun clock(): Long = System.currentTimeMillis()
 
@@ -93,18 +95,40 @@ class DownloadRepository @Inject constructor(
 
     suspend fun delete(download: DownloadEntity) {
         cancel(download)
-        download.localPath?.let { path ->
-            runCatching {
-                if (path.startsWith("content://")) {
-                    // SAF-stored file (user-chosen folder).
-                    androidx.documentfile.provider.DocumentFile
-                        .fromSingleUri(context, android.net.Uri.parse(path))?.delete()
-                } else {
-                    java.io.File(path).delete()
-                }
-            }
+        // Delete the known completed/paused file…
+        download.localPath?.let { deletePath(it) }
+        // …AND any orphaned partial from a failed/queued download, whose localPath is
+        // null but whose bytes are still on disk under a predictable name. This is why
+        // failed downloads could not be "deleted off disk".
+        val fileName = fileNameFor(download.title, download.id)
+        runCatching {
+            val f = java.io.File(java.io.File(context.getExternalFilesDir(null), "downloads"), fileName)
+            if (f.exists()) f.delete()
+        }
+        val folderUri = runCatching { settings.currentDownloadFolderUri() }.getOrNull()
+        if (!folderUri.isNullOrBlank()) runCatching {
+            androidx.documentfile.provider.DocumentFile
+                .fromTreeUri(context, android.net.Uri.parse(folderUri))
+                ?.findFile(fileName)?.delete()
         }
         downloadDao.delete(download)
+    }
+
+    private fun deletePath(path: String) {
+        runCatching {
+            if (path.startsWith("content://")) {
+                androidx.documentfile.provider.DocumentFile
+                    .fromSingleUri(context, android.net.Uri.parse(path))?.delete()
+            } else {
+                java.io.File(path).delete()
+            }
+        }
+    }
+
+    /** Same naming the worker uses, so orphaned partials can be found and removed. */
+    private fun fileNameFor(title: String, id: String): String {
+        val safe = title.replace(Regex("[^A-Za-z0-9._-]"), "_").take(60)
+        return "${safe}_$id.mp4"
     }
 
     private suspend fun enqueueWorker(id: String) {
@@ -117,8 +141,10 @@ class DownloadRepository @Inject constructor(
             .addTag(TAG)
             .build()
         downloadDao.get(id)?.let { downloadDao.upsert(it.copy(workId = request.id.toString())) }
+        // REPLACE (not KEEP) so retrying a failed/paused download always re-runs
+        // instead of being ignored because a stale work with the same name exists.
         WorkManager.getInstance(context)
-            .enqueueUniqueWork("download_$id", ExistingWorkPolicy.KEEP, request)
+            .enqueueUniqueWork("download_$id", ExistingWorkPolicy.REPLACE, request)
     }
 
     companion object {
