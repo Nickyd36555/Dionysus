@@ -71,11 +71,15 @@ fun HomeScreen(
             }
 
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                // Only show a full-screen message when there is genuinely nothing at all.
+                // Tiles (which have defaults and don't need TMDB) must always render, so a
+                // failed catalog can't hide them — that was why the tiles "disappeared".
+                val nothingAtAll = state.featured.isEmpty() && state.rows.isEmpty() && state.tiles.isEmpty()
                 when {
-                    state.isLoading -> CenteredMessage("Loading…")
-                    state.error != null -> CenteredMessage(state.error!!)
-                    state.rows.isEmpty() && state.featured.isEmpty() ->
-                        CenteredMessage("Add a TMDB API key in Settings → Metadata to start browsing.")
+                    state.isLoading && nothingAtAll -> CenteredMessage("Loading…")
+                    nothingAtAll -> CenteredMessage(
+                        state.error ?: "Add a TMDB API key in Settings → Catalog & AI to start browsing.",
+                    )
                     else -> LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(top = 16.dp, bottom = 48.dp),
@@ -100,6 +104,19 @@ fun HomeScreen(
                                 onItemClick = { onOpenDetail(it.id) },
                                 onItemLongClick = if (row.isContinueWatching) ({ menuItem = it }) else null,
                             )
+                        }
+                        // Catalog rows need TMDB; if they're empty, say so inline instead of
+                        // blanking the whole screen (tiles/featured stay visible).
+                        if (state.rows.isEmpty()) {
+                            item {
+                                Text(
+                                    text = state.error
+                                        ?: "Movie rows need a working TMDB key — add/verify it in Settings → Catalog & AI.",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 48.dp, vertical = 12.dp),
+                                )
+                            }
                         }
                     }
                 }
