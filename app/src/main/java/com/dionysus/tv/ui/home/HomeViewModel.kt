@@ -38,6 +38,7 @@ data class HomeRowUi(
 
 data class HomeUiState(
     val featured: List<MediaItem> = emptyList(),
+    val tiles: List<com.dionysus.tv.data.settings.HomeTile> = emptyList(),
     val rows: List<HomeRowUi> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null,
@@ -70,6 +71,12 @@ class HomeViewModel @Inject constructor(
 
     init {
         viewModelScope.launch { homeLayout.ensureSeeded() }
+
+        // Quick tiles are cheap and independent of the (heavy) row rebuild, so collect
+        // them separately — editing tiles in Settings updates Home without a refetch.
+        settings.homeTiles
+            .onEach { tiles -> _state.value = _state.value.copy(tiles = tiles) }
+            .launchIn(viewModelScope)
 
         combine(
             homeLayout.rows,

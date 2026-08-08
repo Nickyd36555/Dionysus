@@ -1,5 +1,6 @@
 package com.dionysus.tv.ui.search
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dionysus.tv.core.model.DataResult
@@ -29,9 +30,11 @@ class SearchViewModel @Inject constructor(
     private val metadata: MetadataRepository,
     private val iptv: IptvRepository,
     private val ai: AiRecommendationRepository,
+    savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
-    private val _query = MutableStateFlow("")
+    // A Home tile (or deep link) can open Search pre-filled via the "q" route arg.
+    private val _query = MutableStateFlow(savedStateHandle.get<String>("q").orEmpty())
     val query: StateFlow<String> = _query.asStateFlow()
 
     /** AI "Similar To" results (Claude → resolved to real cards), and its status. */

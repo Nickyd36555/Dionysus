@@ -15,6 +15,7 @@ import com.dionysus.tv.data.iptv.IptvRepository
 import com.dionysus.tv.data.iptv.StoredPlaylist
 import com.dionysus.tv.data.local.HomeLayoutRepository
 import com.dionysus.tv.data.scraper.ScraperRepository
+import com.dionysus.tv.data.settings.HomeTile
 import com.dionysus.tv.data.settings.SettingsRepository
 import com.dionysus.tv.player.ExternalPlayer
 import com.dionysus.tv.player.PlayerLauncher
@@ -49,6 +50,9 @@ data class SettingsUiState(
     val statusMessage: String? = null,
     val scrapers: List<ScraperInfo> = emptyList(),
     val homeRows: List<HomeRow> = emptyList(),
+    val homeTiles: List<HomeTile> = emptyList(),
+    val newTileLabel: String = "",
+    val newTileQuery: String = "",
     val featuredSource: String = "TRENDING",
     val downloadFolder: String? = null,
     val epgOffsetMinutes: Int = 0,
@@ -103,6 +107,42 @@ class SettingsViewModel @Inject constructor(
         iptv.playlists
             .onEach { list -> _state.value = _state.value.copy(playlists = list) }
             .launchIn(viewModelScope)
+        settings.homeTiles
+            .onEach { tiles -> _state.value = _state.value.copy(homeTiles = tiles) }
+            .launchIn(viewModelScope)
+    }
+
+    // ---- Home quick tiles -------------------------------------------------
+    fun setNewTileLabel(v: String) { _state.value = _state.value.copy(newTileLabel = v) }
+    fun setNewTileQuery(v: String) { _state.value = _state.value.copy(newTileQuery = v) }
+
+    fun addTile() {
+        val s = _state.value
+        val label = s.newTileLabel.trim()
+        if (label.isBlank()) return
+        val query = s.newTileQuery.trim().ifBlank { label }
+        val tile = HomeTile("tile_${System.currentTimeMillis()}", label, query)
+        viewModelScope.launch {
+            settings.setHomeTiles(s.homeTiles + tile)
+            _state.value = _state.value.copy(newTileLabel = "", newTileQuery = "", statusMessage = "Tile added.")
+        }
+    }
+
+    fun removeTile(id: String) {
+        viewModelScope.launch { settings.setHomeTiles(_state.value.homeTiles.filterNot { it.id == id }) }
+    }
+
+    fun moveTileUp(id: String) = reorderTile(id, -1)
+    fun moveTileDown(id: String) = reorderTile(id, +1)
+
+    private fun reorderTile(id: String, delta: Int) {
+        val list = _state.value.homeTiles.toMutableList()
+        val i = list.indexOfFirst { it.id == id }
+        if (i < 0) return
+        val j = (i + delta).coerceIn(0, list.size - 1)
+        if (i == j) return
+        list.add(j, list.removeAt(i))
+        viewModelScope.launch { settings.setHomeTiles(list) }
     }
 
     // ---- Live TV (IPTV) ---------------------------------------------------

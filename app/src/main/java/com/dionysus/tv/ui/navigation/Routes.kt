@@ -10,6 +10,8 @@ object Routes {
     const val LIVE_PLAYER = "liveplayer"
     const val MOVIES = "movies"
     const val SEARCH = "search"
+    // Search screen registered with an optional pre-fill query (used by Home tiles).
+    const val SEARCH_ROUTE = "search?q={q}"
     const val DOWNLOADS = "downloads"
     const val SETTINGS = "settings"
 
@@ -19,6 +21,9 @@ object Routes {
         "player?url={url}&title={title}&progressId={progressId}&poster={poster}&backdrop={backdrop}"
 
     fun detail(mediaId: String): String = "detail/${Uri.encode(mediaId)}"
+
+    /** Open Search pre-filled with a query (e.g. from a Home tile). */
+    fun search(query: String): String = "search?q=${Uri.encode(query)}"
 
     fun streams(mediaId: String, season: Int? = null, episode: Int? = null): String =
         "streams/${Uri.encode(mediaId)}?season=${season ?: -1}&episode=${episode ?: -1}"

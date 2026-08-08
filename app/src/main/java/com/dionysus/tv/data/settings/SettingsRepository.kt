@@ -11,6 +11,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -48,7 +50,11 @@ class SettingsRepository @Inject constructor(
         val ALLOW_INSECURE_TLS = booleanPreferencesKey("allow_insecure_tls")
         val ENABLED_SCRAPERS = stringSetPreferencesKey("enabled_scrapers")
         val ONLY_CACHED = booleanPreferencesKey("only_cached")
+        val HOME_TILES = stringPreferencesKey("home_tiles_json")
     }
+
+    private val tilesJson = Json { ignoreUnknownKeys = true }
+    private val tilesSerializer = ListSerializer(HomeTile.serializer())
 
     val realDebridToken: Flow<String?> = get(Keys.REAL_DEBRID_TOKEN)
     val premiumizeApiKey: Flow<String?> = get(Keys.PREMIUMIZE_API_KEY)
@@ -100,6 +106,10 @@ class SettingsRepository @Inject constructor(
     /** When true, only sources already cached on a debrid service are shown. */
     val onlyCached: Flow<Boolean> =
         context.dataStore.data.map { it[Keys.ONLY_CACHED] ?: false }
+
+    /** Customizable Home quick-access tiles (Disney/Marvel-style shortcuts). */
+    val homeTiles: Flow<List<HomeTile>> =
+        context.dataStore.data.map { decodeTiles(it[Keys.HOME_TILES]) }
 
     suspend fun setRealDebridToken(token: String?) = put(Keys.REAL_DEBRID_TOKEN, token)
 
@@ -166,6 +176,17 @@ class SettingsRepository @Inject constructor(
 
     suspend fun currentOnlyCached(): Boolean = onlyCached.first()
 
+    suspend fun currentHomeTiles(): List<HomeTile> = homeTiles.first()
+
+    suspend fun setHomeTiles(tiles: List<HomeTile>) {
+        put(Keys.HOME_TILES, tilesJson.encodeToString(tilesSerializer, tiles))
+    }
+
+    private fun decodeTiles(raw: String?): List<HomeTile> {
+        if (raw.isNullOrBlank()) return DEFAULT_HOME_TILES
+        return runCatching { tilesJson.decodeFromString(tilesSerializer, raw) }.getOrDefault(DEFAULT_HOME_TILES)
+    }
+
     suspend fun setScraperEnabled(id: String, enabled: Boolean) {
         context.dataStore.edit { prefs ->
             val current = prefs[Keys.ENABLED_SCRAPERS]?.toMutableSet() ?: DEFAULT_SCRAPERS.toMutableSet()
@@ -200,5 +221,15 @@ class SettingsRepository @Inject constructor(
         const val DEFAULT_OMDB_KEY = "1cd5b3b3"
         const val DEFAULT_FEATURED = "TRENDING"
         val DEFAULT_SCRAPERS = setOf("torrentio", "stremio_addons")
+
+        /** Sensible starter tiles; fully editable in Settings → Home Screen. */
+        val DEFAULT_HOME_TILES = listOf(
+            HomeTile("t_marvel", "Marvel", "Marvel"),
+            HomeTile("t_starwars", "Star Wars", "Star Wars"),
+            HomeTile("t_pixar", "Pixar", "Pixar"),
+            HomeTile("t_action", "Action", "Action"),
+            HomeTile("t_comedy", "Comedy", "Comedy"),
+            HomeTile("t_horror", "Horror", "Horror"),
+        )
     }
 }

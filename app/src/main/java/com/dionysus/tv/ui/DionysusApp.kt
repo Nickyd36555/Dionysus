@@ -40,7 +40,10 @@ fun DionysusApp(navController: NavHostController = rememberNavController()) {
 
         composable(Routes.HOME) {
             TopLevel(navController) {
-                HomeScreen(onOpenDetail = { navController.navigate(Routes.detail(it)) })
+                HomeScreen(
+                    onOpenDetail = { navController.navigate(Routes.detail(it)) },
+                    onOpenTile = { query -> navController.navigate(Routes.search(query)) },
+                )
             }
         }
 
@@ -71,7 +74,10 @@ fun DionysusApp(navController: NavHostController = rememberNavController()) {
             }
         }
 
-        composable(Routes.SEARCH) {
+        composable(
+            route = Routes.SEARCH_ROUTE,
+            arguments = listOf(navArgument("q") { type = NavType.StringType; defaultValue = "" }),
+        ) {
             TopLevel(navController) {
                 SearchScreen(
                     onOpenDetail = { navController.navigate(Routes.detail(it)) },
@@ -143,7 +149,8 @@ private fun TopLevel(
     content: @Composable () -> Unit,
 ) {
     val backStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = backStackEntry?.destination?.route
+    // Strip any optional-arg suffix (e.g. "search?q=...") so the rail still highlights.
+    val currentRoute = backStackEntry?.destination?.route?.substringBefore('?')
     val selected = TopLevelDestination.entries.firstOrNull { it.route == currentRoute }
         ?: TopLevelDestination.HOME
 

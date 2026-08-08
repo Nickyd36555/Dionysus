@@ -143,12 +143,14 @@ fun DetailScreen(
             }
         }
 
-        state.extra?.let { extra ->
-            item { ExtraInfoSection(extra) }
-        }
-
+        // AI "Similar" sits right under the action buttons so results appear here
+        // instead of far down the page.
         if (state.similarLoading || state.similar.isNotEmpty() || state.similarMessage != null) {
             item { SimilarSection(state, onOpenDetail) }
+        }
+
+        state.extra?.let { extra ->
+            item { ExtraInfoSection(extra) }
         }
 
         if (item.type == MediaType.TV_SHOW && state.seasons.isNotEmpty()) {

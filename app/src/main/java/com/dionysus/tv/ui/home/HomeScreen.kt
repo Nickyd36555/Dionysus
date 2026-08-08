@@ -4,15 +4,21 @@ package com.dionysus.tv.ui.home
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -23,14 +29,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dionysus.tv.core.model.MediaItem
+import com.dionysus.tv.data.settings.HomeTile
 import com.dionysus.tv.ui.components.AppButton
 import com.dionysus.tv.ui.components.FeaturedCarousel
 import com.dionysus.tv.ui.components.MediaRow
+import com.dionysus.tv.ui.theme.DionysusGold
+import com.dionysus.tv.ui.theme.DionysusGoldBright
+import com.dionysus.tv.ui.theme.DionysusGoldDeep
+import com.dionysus.tv.ui.theme.DionysusOnGold
 import com.dionysus.tv.ui.update.UpdateBanner
 import com.dionysus.tv.ui.update.UpdateViewModel
 import androidx.tv.material3.MaterialTheme
@@ -39,6 +51,7 @@ import androidx.tv.material3.Text
 @Composable
 fun HomeScreen(
     onOpenDetail: (String) -> Unit,
+    onOpenTile: (String) -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
     updateViewModel: UpdateViewModel = hiltViewModel(),
 ) {
@@ -76,6 +89,9 @@ fun HomeScreen(
                                     onDetails = { onOpenDetail(it.id) },
                                 )
                             }
+                        }
+                        if (state.tiles.isNotEmpty()) {
+                            item { QuickTilesRow(tiles = state.tiles, onOpenTile = onOpenTile) }
                         }
                         items(state.rows, key = { it.id }) { row ->
                             MediaRow(
@@ -143,6 +159,51 @@ private fun ContinueWatchingMenu(
             AppButton(onClick = onRemove, modifier = Modifier.fillMaxWidth()) { Text("Remove from Continue Watching") }
             AppButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
         }
+    }
+}
+
+/** The Disney/Marvel-style strip of customizable shortcut tiles. */
+@Composable
+private fun QuickTilesRow(tiles: List<HomeTile>, onOpenTile: (String) -> Unit) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 48.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        items(tiles, key = { it.id }) { tile ->
+            HomeTileChip(label = tile.label, onClick = { onOpenTile(tile.query) })
+        }
+    }
+}
+
+@Composable
+private fun HomeTileChip(label: String, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val shape = RoundedCornerShape(6.dp)
+    // Gold frame at rest; fills into a raised gold plate on focus (matches the buttons).
+    val fill = if (focused) {
+        Brush.verticalGradient(listOf(DionysusGoldBright, DionysusGold))
+    } else {
+        Brush.verticalGradient(listOf(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.surface))
+    }
+    val border = if (focused) DionysusGoldBright else DionysusGoldDeep
+    val fg = if (focused) DionysusOnGold else MaterialTheme.colorScheme.onSurface
+    Box(
+        modifier = Modifier
+            .width(180.dp)
+            .height(84.dp)
+            .clip(shape)
+            .background(fill)
+            .border(if (focused) 2.dp else 1.dp, border, shape)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleMedium,
+            color = fg,
+            maxLines = 1,
+        )
     }
 }
 

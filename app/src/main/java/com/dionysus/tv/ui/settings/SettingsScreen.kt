@@ -547,6 +547,50 @@ fun SettingsScreen(
                             AppButton(onClick = { viewModel.moveHomeRowDown(row.id) }) { Text("↓") }
                         }
                     }
+
+                    item { SectionHeader("Quick Tiles") }
+                    item {
+                        Text(
+                            "The shortcut strip under the Home banner (Marvel, Pixar, Action…). Each tile opens Search for its term. Add studios, genres, or franchises.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth(0.9f).padding(bottom = 4.dp),
+                        )
+                    }
+                    items(state.homeTiles, key = { it.id }) { tile ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(0.9f).padding(vertical = 2.dp),
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                                Text(tile.label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                                Text("Search: ${tile.query}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            AppButton(onClick = { viewModel.moveTileUp(tile.id) }) { Text("↑") }
+                            Spacer(Modifier.width(8.dp))
+                            AppButton(onClick = { viewModel.moveTileDown(tile.id) }) { Text("↓") }
+                            Spacer(Modifier.width(8.dp))
+                            AppButton(onClick = { viewModel.removeTile(tile.id) }) { Text("Remove") }
+                        }
+                    }
+                    item {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(0.85f).padding(top = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            SettingTextField(
+                                label = "New tile name (e.g. Marvel)",
+                                value = state.newTileLabel,
+                                onValueChange = viewModel::setNewTileLabel,
+                            )
+                            SettingTextField(
+                                label = "Search term (optional — defaults to the name)",
+                                value = state.newTileQuery,
+                                onValueChange = viewModel::setNewTileQuery,
+                            )
+                            AppButton(onClick = viewModel::addTile) { Text("Add tile") }
+                        }
+                    }
                 }
 
                 SettingsCategory.APP -> {
