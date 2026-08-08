@@ -70,7 +70,9 @@ fun DetailScreen(
         contentPadding = PaddingValues(bottom = 48.dp),
     ) {
         item {
-            Box(Modifier.fillMaxWidth().height(460.dp)) {
+            // Shorter hero so the action buttons sit within the viewport — the page no
+            // longer has to auto-scroll ("bounce down") to bring a focused button into view.
+            Box(Modifier.fillMaxWidth().height(360.dp)) {
                 AsyncImage(
                     model = item.backdropUrl ?: item.posterUrl,
                     contentDescription = item.title,

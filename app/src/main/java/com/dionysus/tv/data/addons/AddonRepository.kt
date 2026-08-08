@@ -109,6 +109,25 @@ class AddonRepository @Inject constructor(
     }
 
     /**
+     * Search Cinemeta's movie & series catalogs. This gives Search (and Home tiles,
+     * which open Search) real results even when TMDB is unavailable — TMDB is only
+     * one of the search sources, not the only one.
+     */
+    suspend fun searchCatalogs(query: String): List<MediaItem> = coroutineScope {
+        val q = query.trim()
+        if (q.length < 2) return@coroutineScope emptyList()
+        val encoded = java.net.URLEncoder.encode(q, "UTF-8")
+        listOf("movie", "series").map { type ->
+            async {
+                runCatching {
+                    val url = "${AddonApi.CINEMETA_BASE}catalog/$type/top/search=$encoded.json"
+                    api.catalog(url).metas.map { it.toMediaItem() }
+                }.getOrDefault(emptyList())
+            }
+        }.awaitAll().flatten().distinctBy { it.id }
+    }
+
+    /**
      * Some catalog addons return "thin" items (id/type only). When posters are
      * missing, fill title/poster/etc. from Cinemeta (IMDb) so cards render.
      */

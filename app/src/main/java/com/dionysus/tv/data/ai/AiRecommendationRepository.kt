@@ -3,6 +3,7 @@ package com.dionysus.tv.data.ai
 import com.dionysus.tv.core.model.DataResult
 import com.dionysus.tv.core.model.MediaItem
 import com.dionysus.tv.core.model.MediaType
+import com.dionysus.tv.data.addons.AddonRepository
 import com.dionysus.tv.data.metadata.MetadataRepository
 import com.dionysus.tv.data.settings.SettingsRepository
 import kotlinx.coroutines.async
@@ -26,6 +27,7 @@ import javax.inject.Singleton
 class AiRecommendationRepository @Inject constructor(
     private val api: AnthropicApi,
     private val metadata: MetadataRepository,
+    private val addons: AddonRepository,
     private val settings: SettingsRepository,
     private val json: Json,
 ) {
@@ -76,21 +78,18 @@ class AiRecommendationRepository @Inject constructor(
         // Resolve each suggested title to a real card via TMDB. Track lookup failures so a
         // TMDB problem (e.g. no API key) surfaces as an actionable message instead of a
         // misleading "no matches" — the AI's answer isn't the thing that failed.
-        val searched = coroutineScope {
-            filtered.map { s -> async { s to metadata.search(s.title) } }.awaitAll()
-        }
-        val anyLookupError = searched.any { it.second is DataResult.Error }
-        val resolved = searched
-            .mapNotNull { (s, r) -> pickBest(r.getOrNull().orEmpty(), s) }
-            .distinctBy { it.id }
-        return when {
-            resolved.isNotEmpty() -> DataResult.Success(resolved)
-            anyLookupError -> DataResult.Error(
-                "Couldn't reach TMDB to look up the AI's picks — check your TMDB key in " +
-                    "Settings → Metadata (use the v3 API key or the v4 Read Access Token).",
-            )
-            else -> DataResult.Success(emptyList()) // AI answered, TMDB searched, no card matched
-        }
+        val resolved = coroutineScope {
+            filtered.map { s ->
+                async {
+                    // Resolve titles to cards via TMDB, falling back to Cinemeta so AI
+                    // recommendations still work when TMDB is unavailable.
+                    val hits = metadata.search(s.title).getOrNull().orEmpty()
+                        .ifEmpty { runCatching { addons.searchCatalogs(s.title) }.getOrDefault(emptyList()) }
+                    pickBest(hits, s)
+                }
+            }.awaitAll()
+        }.filterNotNull().distinctBy { it.id }
+        return DataResult.Success(resolved)
     }
 
     /** Pick the TMDB result that best matches the AI's title/year/type. */

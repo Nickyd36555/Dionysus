@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dionysus.tv.core.model.DataResult
 import com.dionysus.tv.core.model.MediaItem
+import com.dionysus.tv.data.addons.AddonRepository
 import com.dionysus.tv.data.ai.AiRecommendationRepository
 import com.dionysus.tv.data.iptv.IptvRepository
 import com.dionysus.tv.data.metadata.MetadataRepository
@@ -30,6 +31,7 @@ class SearchViewModel @Inject constructor(
     private val metadata: MetadataRepository,
     private val iptv: IptvRepository,
     private val ai: AiRecommendationRepository,
+    private val addons: AddonRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -59,9 +61,12 @@ class SearchViewModel @Inject constructor(
             val q = raw.trim()
             if (q.length < 2) return@mapLatest emptyList()
             coroutineScope {
+                // Three independent sources so results still appear if one is down
+                // (e.g. TMDB unreachable → Cinemeta + IPTV still return hits).
                 val catalog = async { metadata.search(q).getOrNull().orEmpty() }
+                val addonHits = async { runCatching { addons.searchCatalogs(q) }.getOrDefault(emptyList()) }
                 val iptvHits = async { runCatching { iptv.searchContent(q) }.getOrDefault(emptyList()) }
-                (catalog.await() + iptvHits.await()).distinctBy { it.id }
+                (catalog.await() + addonHits.await() + iptvHits.await()).distinctBy { it.id }
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
