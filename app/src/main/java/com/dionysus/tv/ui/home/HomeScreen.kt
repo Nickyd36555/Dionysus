@@ -94,9 +94,6 @@ fun HomeScreen(
                                 )
                             }
                         }
-                        if (state.tiles.isNotEmpty()) {
-                            item { QuickTilesRow(tiles = state.tiles, onOpenTile = onOpenTile) }
-                        }
                         items(state.rows, key = { it.id }) { row ->
                             MediaRow(
                                 title = row.title,
@@ -176,51 +173,6 @@ private fun ContinueWatchingMenu(
             AppButton(onClick = onRemove, modifier = Modifier.fillMaxWidth()) { Text("Remove from Continue Watching") }
             AppButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
         }
-    }
-}
-
-/** The Disney/Marvel-style strip of customizable shortcut tiles. */
-@Composable
-private fun QuickTilesRow(tiles: List<HomeTile>, onOpenTile: (String) -> Unit) {
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = 48.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        items(tiles, key = { it.id }) { tile ->
-            HomeTileChip(label = tile.label, onClick = { onOpenTile(tile.query) })
-        }
-    }
-}
-
-@Composable
-private fun HomeTileChip(label: String, onClick: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    val focused by interaction.collectIsFocusedAsState()
-    val shape = RoundedCornerShape(6.dp)
-    // Gold frame at rest; fills into a raised gold plate on focus (matches the buttons).
-    val fill = if (focused) {
-        Brush.verticalGradient(listOf(DionysusGoldBright, DionysusGold))
-    } else {
-        Brush.verticalGradient(listOf(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.surface))
-    }
-    val border = if (focused) DionysusGoldBright else DionysusGoldDeep
-    val fg = if (focused) DionysusOnGold else MaterialTheme.colorScheme.onSurface
-    Box(
-        modifier = Modifier
-            .width(180.dp)
-            .height(84.dp)
-            .clip(shape)
-            .background(fill)
-            .border(if (focused) 2.dp else 1.dp, border, shape)
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.titleMedium,
-            color = fg,
-            maxLines = 1,
-        )
     }
 }
 
