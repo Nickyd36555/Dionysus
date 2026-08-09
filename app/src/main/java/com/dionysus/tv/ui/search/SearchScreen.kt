@@ -32,6 +32,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -325,6 +328,7 @@ private fun SearchField(value: String, onValueChange: (String) -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
@@ -335,7 +339,25 @@ private fun SearchField(value: String, onValueChange: (String) -> Unit) {
             ),
             cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Search),
-            modifier = Modifier.fillMaxWidth(),
+            // Pressing Search or Enter, or D-pad Down, releases focus to the results
+            // below — otherwise the text field traps D-pad focus and you're stuck in it.
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                onSearch = { focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Down) },
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onPreviewKeyEvent { event ->
+                    if (event.type == androidx.compose.ui.input.key.KeyEventType.KeyDown &&
+                        (event.key == androidx.compose.ui.input.key.Key.DirectionDown ||
+                            event.key == androidx.compose.ui.input.key.Key.Enter ||
+                            event.key == androidx.compose.ui.input.key.Key.NumPadEnter)
+                    ) {
+                        focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Down)
+                        true
+                    } else {
+                        false
+                    }
+                },
         )
     }
 }
