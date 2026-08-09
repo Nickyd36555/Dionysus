@@ -1,9 +1,7 @@
 package com.dionysus.tv.download
 
 import android.content.Context
-import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
@@ -132,12 +130,12 @@ class DownloadRepository @Inject constructor(
     }
 
     private suspend fun enqueueWorker(id: String) {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
+        // No network constraint: on many Android TV boxes (Ethernet/VPN) WorkManager
+        // mis-reads NetworkType.CONNECTED as unmet and the job sits in QUEUED forever.
+        // The worker checks connectivity itself and fails/retries if truly offline.
         val request = OneTimeWorkRequestBuilder<DownloadWorker>()
             .setInputData(workDataOf(DownloadWorker.KEY_DOWNLOAD_ID to id))
-            .setConstraints(constraints)
+            .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .addTag(TAG)
             .build()
         downloadDao.get(id)?.let { downloadDao.upsert(it.copy(workId = request.id.toString())) }
