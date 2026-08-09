@@ -24,6 +24,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.OutputStream
+import java.util.concurrent.TimeUnit
 
 /**
  * Streams a resolved direct URL to app-scoped external storage, reporting byte
@@ -38,6 +39,20 @@ class DownloadWorker @AssistedInject constructor(
     private val okHttpClient: OkHttpClient,
     private val settings: SettingsRepository,
 ) : CoroutineWorker(appContext, params) {
+
+    /**
+     * A download-only client: the shared client's 60s callTimeout would kill any
+     * download longer than a minute (which is basically all of them). Here there is
+     * no overall call timeout; a read timeout still detects a genuinely dead stall.
+     */
+    private val downloadClient: OkHttpClient by lazy {
+        okHttpClient.newBuilder()
+            .callTimeout(0, TimeUnit.MILLISECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(0, TimeUnit.MILLISECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+    }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val downloadId = inputData.getString(KEY_DOWNLOAD_ID) ?: return@withContext Result.failure()
@@ -60,7 +75,7 @@ class DownloadWorker @AssistedInject constructor(
             val builder = Request.Builder().url(url)
             if (existing > 0) builder.header("Range", "bytes=$existing-")
 
-            okHttpClient.newCall(builder.build()).execute().use { response ->
+            downloadClient.newCall(builder.build()).execute().use { response ->
                 // 416 = we already have the whole file.
                 if (response.code == 416) {
                     downloadDao.updateStatus(downloadId, DownloadStatus.COMPLETED.name, target.pathString)
@@ -75,9 +90,9 @@ class DownloadWorker @AssistedInject constructor(
                 val total = if (append) existing + body.contentLength() else body.contentLength()
                     .takeIf { it > 0 } ?: entity.totalBytes
 
-                body.byteStream().use { input ->
-                    target.openOutput(append).use { output ->
-                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                body.byteStream().buffered(BUFFER_BYTES).use { input ->
+                    target.openOutput(append).buffered(BUFFER_BYTES).use { output ->
+                        val buffer = ByteArray(BUFFER_BYTES)
                         var read: Int
                         var lastReported = downloaded
                         while (input.read(buffer).also { read = it } != -1) {
@@ -179,5 +194,7 @@ class DownloadWorker @AssistedInject constructor(
         private const val CHANNEL_ID = "downloads"
         private const val NOTIFICATION_ID = 1001
         private const val PROGRESS_INTERVAL_BYTES = 1_000_000L
+        // Large buffer + buffered streams cut syscall overhead for much faster writes.
+        private const val BUFFER_BYTES = 256 * 1024
     }
 }
