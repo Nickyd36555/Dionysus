@@ -19,13 +19,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.decodeFromStream
-import kotlinx.serialization.json.encodeToStream
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -255,20 +252,16 @@ class IptvRepository @Inject constructor(
         if (cachedEpg.isEmpty()) cachedEpg = runCatching { loadEpg() }.getOrDefault(emptyMap())
     }
 
-    @OptIn(ExperimentalSerializationApi::class)
     private fun readContentDisk(): ContentCache? = runCatching {
         if (!contentCacheFile.exists()) return null
-        contentCacheFile.inputStream().buffered().use { json.decodeFromStream(ContentCache.serializer(), it) }
+        json.decodeFromString(ContentCache.serializer(), contentCacheFile.readText())
     }.onFailure { Log.w(TAG, "Content cache read failed", it) }.getOrNull()
 
-    @OptIn(ExperimentalSerializationApi::class)
     private fun writeContentDisk(channels: List<Channel>, vod: List<MediaItem>) {
         runCatching {
             val cache = ContentCache(System.currentTimeMillis(), channels, vod)
             val tmp = File(contentCacheFile.parentFile, contentCacheFile.name + ".tmp")
-            tmp.outputStream().buffered().use { out ->
-                json.encodeToStream(ContentCache.serializer(), cache, out)
-            }
+            tmp.writeText(json.encodeToString(ContentCache.serializer(), cache))
             if (!tmp.renameTo(contentCacheFile)) {
                 tmp.copyTo(contentCacheFile, overwrite = true)
                 tmp.delete()
@@ -467,25 +460,18 @@ class IptvRepository @Inject constructor(
         merged
     }
 
-    @OptIn(ExperimentalSerializationApi::class)
     private fun readEpgDisk(): EpgCache? = runCatching {
         if (!epgCacheFile.exists()) return null
-        // Stream-decode so a large cache doesn't have to be read into one big String.
-        epgCacheFile.inputStream().buffered().use { json.decodeFromStream(EpgCache.serializer(), it) }
+        json.decodeFromString(EpgCache.serializer(), epgCacheFile.readText())
     }.onFailure { Log.w(TAG, "EPG cache read failed", it) }.getOrNull()
 
-    @OptIn(ExperimentalSerializationApi::class)
     private fun writeEpgDisk(epg: Map<String, List<Programme>>) {
         runCatching {
             val cache = EpgCache(savedAtMs = System.currentTimeMillis(), programmes = epg)
-            // Stream straight to a temp file, then atomically swap it in. Building the
-            // whole XMLTV as a single String (the old approach) could OOM on big
-            // providers, silently leaving no cache — which forced a network reload
-            // every launch. Streaming keeps memory flat so the cache actually persists.
+            // Write to a temp file, then atomically swap it in. (Pruning past programmes
+            // in loadEpg keeps this from getting large.)
             val tmp = File(epgCacheFile.parentFile, epgCacheFile.name + ".tmp")
-            tmp.outputStream().buffered().use { out ->
-                json.encodeToStream(EpgCache.serializer(), cache, out)
-            }
+            tmp.writeText(json.encodeToString(EpgCache.serializer(), cache))
             if (!tmp.renameTo(epgCacheFile)) {
                 tmp.copyTo(epgCacheFile, overwrite = true)
                 tmp.delete()
