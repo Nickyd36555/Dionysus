@@ -657,8 +657,12 @@ private fun EpgGuide(
     // Start the timeline at the current half-hour so the on-now show is leftmost
     // (fully-past programmes are dropped), matching how TiViMate lays it out.
     val timelineStart = (now / slotMs) * slotMs
-    val maxStop = channels.maxOf { ch -> programmesFor(ch).maxOfOrNull { it.stopMs } ?: (now + 3 * 3_600_000L) }
-    val totalSlots = (((maxStop - timelineStart) / slotMs).toInt() + 1).coerceIn(6, 48)
+    // Fixed 24-hour window. Rendering the whole week (and scanning every programme of
+    // every channel to size it) made the guide slow to open and janky to scroll; a
+    // day is what fits on screen and loads fast. Scroll right for later slots.
+    val windowMs = 24 * 60 * 60_000L
+    val windowEnd = timelineStart + windowMs
+    val totalSlots = (windowMs / slotMs).toInt()
 
     Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().padding(top = 12.dp)) {
@@ -709,15 +713,18 @@ private fun EpgGuide(
                         modifier = Modifier.horizontalScroll(scroll).fillMaxHeight(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        // Only the 24h window: on-screen now, ending after start, starting
+                        // before the window ends. Blocks are clamped to the window edge.
                         val programmes = programmesFor(channel)
-                            .filter { it.stopMs > timelineStart }
+                            .filter { it.stopMs > timelineStart && it.startMs < windowEnd }
                             .sortedBy { it.startMs }
                         var cursor = timelineStart
                         programmes.forEach { prog ->
                             val start = maxOf(prog.startMs, timelineStart)
+                            val stop = minOf(prog.stopMs, windowEnd)
                             val gapMin = ((start - cursor) / 60_000L).toInt()
                             if (gapMin > 0) Spacer(Modifier.width((gapMin * PX_PER_MIN).dp))
-                            val widthMin = ((prog.stopMs - start) / 60_000L).toInt().coerceAtLeast(6)
+                            val widthMin = ((stop - start) / 60_000L).toInt().coerceAtLeast(6)
                             ProgrammeBlock(
                                 widthDp = (widthMin * PX_PER_MIN).dp,
                                 time = "${formatClock(prog.startMs, zone)}–${formatClock(prog.stopMs, zone)}",

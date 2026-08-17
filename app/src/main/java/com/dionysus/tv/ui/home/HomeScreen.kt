@@ -102,19 +102,6 @@ fun HomeScreen(
                                 onItemLongClick = if (row.isContinueWatching) ({ menuItem = it }) else null,
                             )
                         }
-                        // Catalog rows need TMDB; if they're empty, say so inline instead of
-                        // blanking the whole screen (tiles/featured stay visible).
-                        if (state.rows.isEmpty()) {
-                            item {
-                                Text(
-                                    text = state.error
-                                        ?: "Movie rows need a working TMDB key — add/verify it in Settings → Catalog & AI.",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 48.dp, vertical = 12.dp),
-                                )
-                            }
-                        }
                     }
                 }
             }
