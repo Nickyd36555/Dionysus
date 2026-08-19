@@ -441,10 +441,16 @@ class IptvRepository @Inject constructor(
         cachedEpg
     }
 
-    /** Keep only programmes that haven't ended yet (plus a small past window). */
+    /**
+     * Keep only a small window of programmes (last hour → +2 days). A full week of
+     * XMLTV makes the cache huge and slow to parse on relaunch; the guide only shows
+     * ~24h anyway, so trimming keeps the cached file small and quick to load.
+     */
     private fun prunePast(epg: Map<String, List<Programme>>): Map<String, List<Programme>> {
-        val cutoff = System.currentTimeMillis() - 60 * 60 * 1000L // keep the last hour
-        return epg.mapValues { (_, progs) -> progs.filter { it.stopMs >= cutoff } }
+        val now = System.currentTimeMillis()
+        val start = now - 60 * 60 * 1000L          // keep the last hour
+        val end = now + 2 * 24 * 60 * 60 * 1000L   // ...through two days ahead
+        return epg.mapValues { (_, progs) -> progs.filter { it.stopMs >= start && it.startMs <= end } }
             .filterValues { it.isNotEmpty() }
     }
 

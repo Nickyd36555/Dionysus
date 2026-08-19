@@ -35,7 +35,7 @@ private val DionysusColorScheme = darkColorScheme(
  */
 @OptIn(ExperimentalFoundationApi::class)
 private val SmoothBringIntoView = object : BringIntoViewSpec {
-    override val scrollAnimationSpec = tween<Float>(durationMillis = 150)
+    override val scrollAnimationSpec = tween<Float>(durationMillis = 80)
 
     // Minimal-scroll: if the item is already visible, don't move; otherwise scroll
     // just enough to bring its nearest edge into view (same as the framework default,
