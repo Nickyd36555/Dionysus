@@ -169,6 +169,20 @@ class DownloadWorker @AssistedInject constructor(
         override val pathString: String get() = uri.toString()
     }
 
+    /**
+     * WorkManager calls this BEFORE doWork() whenever the request is expedited, to
+     * promote the job to a foreground service. CoroutineWorker's base implementation
+     * throws IllegalStateException("Not implemented"), which crashed the app on every
+     * launch that had a queued/expedited download. Supplying a real ForegroundInfo
+     * here is mandatory for expedited work — this is the definitive crash fix.
+     */
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        val title = inputData.getString(KEY_DOWNLOAD_ID)
+            ?.let { runCatching { downloadDao.get(it)?.title }.getOrNull() }
+            ?: "Preparing download"
+        return foregroundInfo(title)
+    }
+
     private fun foregroundInfo(title: String): ForegroundInfo {
         val manager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
