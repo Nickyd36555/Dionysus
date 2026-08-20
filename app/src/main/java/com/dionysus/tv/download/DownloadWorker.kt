@@ -63,7 +63,11 @@ class DownloadWorker @AssistedInject constructor(
             return@withContext Result.failure()
         }
 
-        setForeground(foregroundInfo(entity.title))
+        // Best-effort foreground promotion. On Android 14 TV boxes, starting a
+        // dataSync foreground service can throw (ForegroundServiceStartNotAllowed and
+        // related). That must never crash the download — if promotion fails we simply
+        // run as a normal background worker, which is fine while the app is in use.
+        runCatching { setForeground(foregroundInfo(entity.title)) }
         // Target is either the user's chosen SAF folder (USB/SD/network) or app storage.
         val target = resolveTarget(entity.title, downloadId)
 

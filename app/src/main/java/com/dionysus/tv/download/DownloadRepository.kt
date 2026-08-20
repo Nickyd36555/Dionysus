@@ -133,9 +133,15 @@ class DownloadRepository @Inject constructor(
         // No network constraint: on many Android TV boxes (Ethernet/VPN) WorkManager
         // mis-reads NetworkType.CONNECTED as unmet and the job sits in QUEUED forever.
         // The worker checks connectivity itself and fails/retries if truly offline.
+        //
+        // No setExpedited(): expedited work makes WorkManager promote the job to a
+        // foreground service at SCHEDULE time (inside its own coroutine), calling
+        // getForegroundInfo() and startForeground(). On Android 14 TV boxes that path
+        // throws and crashed the app before doWork ever ran. As a normal worker the
+        // download still runs immediately while the app is in use, and the worker does
+        // its own best-effort setForeground() for long/background downloads.
         val request = OneTimeWorkRequestBuilder<DownloadWorker>()
             .setInputData(workDataOf(DownloadWorker.KEY_DOWNLOAD_ID to id))
-            .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .addTag(TAG)
             .build()
         downloadDao.get(id)?.let { downloadDao.upsert(it.copy(workId = request.id.toString())) }
