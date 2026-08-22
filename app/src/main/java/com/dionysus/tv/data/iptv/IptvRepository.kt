@@ -236,6 +236,28 @@ class IptvRepository @Inject constructor(
         return cachedChannels to cachedVod
     }
 
+    @Volatile private var warmed = false
+
+    /**
+     * Gentle background warm-up kicked off at app launch, so the Live TV guide is
+     * already refreshing (or done) by the time the user opens it — instead of the
+     * refresh only starting on first navigation to Live TV. Runs at most once per
+     * process and swallows all errors: it must never affect startup or crash. When
+     * there are no playlists yet, it does nothing.
+     */
+    suspend fun warmUp() {
+        if (warmed) return
+        warmed = true
+        runCatching {
+            val defs = runCatching { playlists.first() }.getOrDefault(emptyList())
+            if (defs.isEmpty()) return
+            // Content first (channels/VOD), then EPG — both populate memory + disk
+            // caches that LiveTvViewModel.refresh() reads instantly.
+            refreshContent()
+            loadEpg()
+        }
+    }
+
     /** Populate the in-memory caches (channels, VOD): memory → disk → network. */
     private suspend fun ensureLoaded() {
         if (loaded && cachedChannels.isNotEmpty()) return

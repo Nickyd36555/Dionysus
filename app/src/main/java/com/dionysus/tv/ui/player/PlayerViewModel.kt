@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dionysus.tv.core.model.MediaType
 import com.dionysus.tv.data.local.LibraryRepository
+import com.dionysus.tv.player.ExternalPlayer
+import com.dionysus.tv.player.PlayerLauncher
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,7 +18,15 @@ import javax.inject.Inject
 class PlayerViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val library: LibraryRepository,
+    private val playerLauncher: PlayerLauncher,
 ) : ViewModel() {
+
+    /** External players (Kodi/VLC/MX/…) that are actually installed on this box. */
+    fun installedExternalPlayers(): List<ExternalPlayer> = playerLauncher.installedExternalPlayers()
+
+    /** Hand the current stream off to an external player at the given position. */
+    fun openExternally(player: ExternalPlayer, positionMs: Long): Boolean =
+        playerLauncher.launch(player, url, title, positionMs)
 
     val url: String = savedStateHandle.get<String>("url").orEmpty()
     val title: String = savedStateHandle.get<String>("title").orEmpty()

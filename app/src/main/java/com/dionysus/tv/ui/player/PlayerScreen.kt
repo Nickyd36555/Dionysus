@@ -32,9 +32,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.FastForward
+import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.Forward10
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Subtitles
@@ -78,7 +83,7 @@ import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.util.VLCVideoLayout
 
 /** Which secondary panel (if any) is showing over the video. */
-private enum class Panel { NONE, AUDIO, SUBTITLE, SPEED, ASPECT, SYNC }
+private enum class Panel { NONE, AUDIO, SUBTITLE, SPEED, ASPECT, SYNC, INFO, EXTERNAL }
 
 private val SPEEDS = listOf(0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
 private val ASPECTS = listOf("Fit", "16:9", "4:3", "Zoom", "Original")
@@ -374,7 +379,7 @@ fun PlayerScreen(
             }
         }
 
-        // Secondary panels (audio/subtitle/speed/aspect/sync).
+        // Secondary panels (audio/subtitle/speed/aspect/sync/info/external).
         if (panel != Panel.NONE) {
             OptionsPanel(
                 panel = panel,
@@ -384,12 +389,22 @@ fun PlayerScreen(
                 audioDelayMs = audioDelayMs,
                 subDelayMs = subDelayMs,
                 firstFocus = panelFocus,
+                externalPlayers = remember { viewModel.installedExternalPlayers() },
                 onSelectAudio = { player.audioTrack = it; closePanel() },
                 onSelectSubtitle = { player.spuTrack = it; closePanel() },
                 onSelectSpeed = { speed = it; closePanel() },
                 onSelectAspect = { aspect = it; closePanel() },
                 onAudioDelay = { audioDelayMs += it; bump() },
                 onSubDelay = { subDelayMs += it; bump() },
+                onLaunchExternal = { ext ->
+                    val ok = viewModel.openExternally(ext, player.time)
+                    android.widget.Toast.makeText(
+                        context,
+                        if (ok) "Opening in ${ext.displayName}…" else "Couldn't open ${ext.displayName}",
+                        android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                    if (ok) onBack() else closePanel()
+                },
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
         }
@@ -404,8 +419,11 @@ fun PlayerScreen(
                 speed = speed,
                 barFocus = barFocus,
                 onTogglePlay = { togglePlay() },
+                onRestart = { player.time = 0L; positionMs = 0L; bump() },
                 onSeekBack = { seekBy(-10_000) },
                 onSeekForward = { seekBy(10_000) },
+                onSeekBack60 = { seekBy(-60_000) },
+                onSeekForward60 = { seekBy(60_000) },
                 onSeekTo = { player.time = it; positionMs = it; bump() },
                 onOpenPanel = { panel = it; interaction++ },
                 modifier = Modifier.align(Alignment.BottomCenter),
@@ -435,8 +453,11 @@ private fun PlayerControls(
     speed: Float,
     barFocus: FocusRequester,
     onTogglePlay: () -> Unit,
+    onRestart: () -> Unit,
     onSeekBack: () -> Unit,
     onSeekForward: () -> Unit,
+    onSeekBack60: () -> Unit,
+    onSeekForward60: () -> Unit,
     onSeekTo: (Long) -> Unit,
     onOpenPanel: (Panel) -> Unit,
     modifier: Modifier = Modifier,
@@ -495,14 +516,19 @@ private fun PlayerControls(
                 onClick = onTogglePlay,
             )
             if (!isLive) {
+                ControlButton(Icons.Default.Replay, "Restart", onClick = onRestart)
+                ControlButton(Icons.Default.FastRewind, "-60s", onClick = onSeekBack60)
                 ControlButton(Icons.Default.Replay10, "-10s", onClick = onSeekBack)
                 ControlButton(Icons.Default.Forward10, "+10s", onClick = onSeekForward)
+                ControlButton(Icons.Default.FastForward, "+60s", onClick = onSeekForward60)
             }
             ControlButton(Icons.Default.Audiotrack, "Audio") { onOpenPanel(Panel.AUDIO) }
             ControlButton(Icons.Default.Subtitles, "Subtitles") { onOpenPanel(Panel.SUBTITLE) }
             ControlButton(Icons.Default.Speed, "${trimSpeed(speed)}x") { onOpenPanel(Panel.SPEED) }
             ControlButton(Icons.Default.AspectRatio, "Aspect") { onOpenPanel(Panel.ASPECT) }
             ControlButton(Icons.Default.Tune, "Sync") { onOpenPanel(Panel.SYNC) }
+            ControlButton(Icons.Default.Info, "Info") { onOpenPanel(Panel.INFO) }
+            ControlButton(Icons.Default.OpenInNew, "External") { onOpenPanel(Panel.EXTERNAL) }
         }
     }
 }
@@ -583,12 +609,14 @@ private fun OptionsPanel(
     audioDelayMs: Long,
     subDelayMs: Long,
     firstFocus: FocusRequester,
+    externalPlayers: List<com.dionysus.tv.player.ExternalPlayer>,
     onSelectAudio: (Int) -> Unit,
     onSelectSubtitle: (Int) -> Unit,
     onSelectSpeed: (Float) -> Unit,
     onSelectAspect: (String) -> Unit,
     onAudioDelay: (Long) -> Unit,
     onSubDelay: (Long) -> Unit,
+    onLaunchExternal: (com.dionysus.tv.player.ExternalPlayer) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -661,6 +689,33 @@ private fun OptionsPanel(
                         PanelRow(label = "Subs −50ms", onClick = { onSubDelay(-50) }, modifier = Modifier.weight(1f))
                         PanelRow(label = "Subs +50ms", onClick = { onSubDelay(50) }, modifier = Modifier.weight(1f))
                     }
+                }
+            }
+            Panel.INFO -> {
+                item { PanelTitle("Stream Info") }
+                val vt = runCatching { player.currentVideoTrack }.getOrNull()
+                if (vt != null) {
+                    item { PanelHint("Resolution: ${vt.width} × ${vt.height}") }
+                }
+                item { PanelHint("Length: ${formatTime(player.length)}") }
+                val audioCount = runCatching { player.audioTracks?.size ?: 0 }.getOrDefault(0)
+                item { PanelHint("Audio tracks: $audioCount") }
+                val subCount = runCatching { player.spuTracks?.size ?: 0 }.getOrDefault(0)
+                item { PanelHint("Subtitle tracks: $subCount") }
+                item { PanelHint("Decoder: hardware with automatic software fallback (LibVLC).") }
+                item { PanelHint("Codecs: HEVC/H.264/VP9/AV1 video · AC3/E-AC3/DTS/TrueHD/AAC/FLAC/Opus audio.") }
+            }
+            Panel.EXTERNAL -> {
+                item { PanelTitle("Open In…") }
+                if (externalPlayers.isEmpty()) {
+                    item { PanelHint("No external players installed. Install Kodi, VLC, MX Player or nPlayer to hand streams off to them.") }
+                }
+                itemsIndexed(externalPlayers) { index, ext ->
+                    PanelRow(
+                        label = ext.displayName,
+                        onClick = { onLaunchExternal(ext) },
+                        modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier,
+                    )
                 }
             }
             Panel.NONE -> Unit

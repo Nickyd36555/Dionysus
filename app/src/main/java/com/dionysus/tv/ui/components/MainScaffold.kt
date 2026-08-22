@@ -36,6 +36,8 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -47,6 +49,11 @@ import com.dionysus.tv.R
 import com.dionysus.tv.ui.navigation.TopLevelDestination
 
 private val RAIL_WIDTH = 76.dp
+
+// Process-level one-shot: on the very first app launch we drop initial D-pad focus
+// on the Dionysus (Home) rail icon, so navigation "starts on Dionysus". Subsequent
+// section switches leave focus in the content, which is the expected TV behavior.
+private var railFocusedOnce = false
 
 /** Lets a top-level screen hide the nav rail (e.g. the Live TV guide going full-screen). */
 class RailController(val setHidden: (Boolean) -> Unit)
@@ -73,6 +80,15 @@ fun MainScaffold(
     LaunchedEffect(selected) { railHidden = false }
     val controller = remember { RailController { railHidden = it } }
 
+    // On first launch, land focus on the Dionysus (Home) icon.
+    val homeFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        if (!railFocusedOnce && selected == TopLevelDestination.HOME) {
+            railFocusedOnce = true
+            runCatching { homeFocus.requestFocus() }
+        }
+    }
+
     Row(
         modifier = Modifier
             .fillMaxSize()
@@ -97,6 +113,7 @@ fun MainScaffold(
                             label = dest.label,
                             selected = dest == selected,
                             onClick = { onSelect(dest) },
+                            modifier = Modifier.focusRequester(homeFocus),
                         )
                     } else {
                         NavRailIcon(
@@ -124,12 +141,13 @@ private fun NavRailImage(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     val shape = RoundedCornerShape(6.dp)
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(52.dp)
             .clip(shape)
             .then(
