@@ -199,6 +199,12 @@ fun PlayerScreen(
         }.apply { setHWDecoderEnabled(true, false) }
         player.media = media
         media.release()
+        // Audio passthrough: bitstream Dolby/DTS/TrueHD/Atmos to a receiver instead
+        // of decoding to PCM, when the user has enabled it AND the device path can do
+        // it. Best-effort — never let this stop playback.
+        runCatching {
+            player.setAudioDigitalOutputEnabled(viewModel.audioPassthrough.value && player.canDoPassthrough())
+        }
         player.play()
     }
 

@@ -62,7 +62,13 @@ class DownloadRepository @Inject constructor(
             ),
         )
 
-        val directUrl = source.url ?: debridRepository.resolve(source, preferred)?.playbackUrl
+        val directUrl = try {
+            source.url ?: debridRepository.resolve(source, preferred)?.playbackUrl
+        } catch (e: com.dionysus.tv.data.debrid.DebridException) {
+            // Account-level problem: mark failed rather than downloading a notice video.
+            downloadDao.updateStatus(id, DownloadStatus.FAILED.name, null)
+            return null
+        }
         if (directUrl.isNullOrBlank()) {
             downloadDao.updateStatus(id, DownloadStatus.FAILED.name, null)
             return null

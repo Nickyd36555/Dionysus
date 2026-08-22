@@ -64,9 +64,17 @@ class DebridRepository @Inject constructor(
             addAll(connected)
         }.distinct()
 
+        // Remember an account-level error but keep trying other providers — only
+        // surface it if none of them can serve the source.
+        var accountError: DebridException? = null
         for (service in ordered) {
-            service.resolve(source)?.let { return it }
+            try {
+                service.resolve(source)?.let { return it }
+            } catch (e: DebridException) {
+                accountError = e
+            }
         }
+        accountError?.let { throw it }
         return null
     }
 }

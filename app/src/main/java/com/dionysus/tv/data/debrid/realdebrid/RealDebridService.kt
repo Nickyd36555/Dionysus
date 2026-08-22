@@ -5,6 +5,7 @@ import com.dionysus.tv.core.model.DebridAccount
 import com.dionysus.tv.core.model.DebridProvider
 import com.dionysus.tv.core.model.ResolvedStream
 import com.dionysus.tv.core.model.StreamSource
+import com.dionysus.tv.data.debrid.DebridException
 import com.dionysus.tv.data.debrid.DebridService
 import com.dionysus.tv.data.debrid.VideoExtensions
 import com.dionysus.tv.data.settings.SettingsRepository
@@ -64,6 +65,9 @@ class RealDebridService @Inject constructor(
             val ready = pollUntilReady(added.id) ?: return null
             val link = ready.links.firstOrNull() ?: return null
             unrestrict(link)
+        } catch (e: DebridException) {
+            // Account-level problem — surface it to the user, don't hide as "no source".
+            throw e
         } catch (t: Throwable) {
             Log.w(TAG, "Real-Debrid resolve failed", t)
             null
@@ -72,6 +76,19 @@ class RealDebridService @Inject constructor(
 
     private suspend fun unrestrict(link: String): ResolvedStream {
         val u = api.unrestrict(link)
+        // When an account has hit its fair-use / usage limit (or premium has
+        // lapsed), Real-Debrid does not error — it unrestricts to a tiny "notice"
+        // video (the red "usage limit exceeded" screen). No real movie/episode is
+        // only a few MB, so a suspiciously small file is that notice. Catch it and
+        // tell the user instead of letting the notice play.
+        val size = u.filesize
+        if (size != null && size in 1 until NOTICE_MAX_BYTES) {
+            throw DebridException(
+                "Real-Debrid returned a notice instead of the video — your account has " +
+                    "likely hit its usage/fair-use limit or run out of premium time. " +
+                    "Check your Real-Debrid account, then try again or pick another source.",
+            )
+        }
         return ResolvedStream(
             playbackUrl = u.download,
             fileName = u.filename ?: "video",
@@ -108,5 +125,7 @@ class RealDebridService @Inject constructor(
         private const val POLL_ATTEMPTS = 12
         private const val POLL_DELAY_MS = 1500L
         private val TERMINAL_FAILURES = setOf("error", "magnet_error", "virus", "dead")
+        // Real-Debrid's limit/notice videos are only a few MB; no real feature is.
+        private const val NOTICE_MAX_BYTES = 10_000_000L
     }
 }

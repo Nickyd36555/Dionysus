@@ -451,6 +451,22 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    item { SectionHeader("Audio") }
+                    item {
+                        ToggleRow(
+                            label = "Audio passthrough (Dolby / DTS / Atmos to receiver)",
+                            enabled = state.audioPassthrough,
+                            onToggle = viewModel::setAudioPassthrough,
+                        )
+                    }
+                    item {
+                        Text(
+                            "Bitstreams surround audio untouched to an AV receiver or soundbar over HDMI, like Kodi. Turn this on ONLY if your TV is connected to gear that can decode Dolby Digital/DTS — otherwise the built-in TV speakers may be silent. Leave it off for normal TV audio.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth(0.85f).padding(bottom = 4.dp),
+                        )
+                    }
                     item { SectionHeader("Connection") }
                     item {
                         ToggleRow(

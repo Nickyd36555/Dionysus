@@ -5,12 +5,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dionysus.tv.core.model.MediaType
 import com.dionysus.tv.data.local.LibraryRepository
+import com.dionysus.tv.data.settings.SettingsRepository
 import com.dionysus.tv.player.ExternalPlayer
 import com.dionysus.tv.player.PlayerLauncher
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -19,7 +22,15 @@ class PlayerViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val library: LibraryRepository,
     private val playerLauncher: PlayerLauncher,
+    settings: SettingsRepository,
 ) : ViewModel() {
+
+    /**
+     * Whether to bitstream Dolby/DTS/TrueHD/Atmos untouched to a receiver
+     * (passthrough) instead of decoding to PCM. Read once at player start.
+     */
+    val audioPassthrough: StateFlow<Boolean> =
+        settings.audioPassthrough.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /** External players (Kodi/VLC/MX/…) that are actually installed on this box. */
     fun installedExternalPlayers(): List<ExternalPlayer> = playerLauncher.installedExternalPlayers()

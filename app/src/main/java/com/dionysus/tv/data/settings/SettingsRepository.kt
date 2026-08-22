@@ -51,6 +51,7 @@ class SettingsRepository @Inject constructor(
         val ENABLED_SCRAPERS = stringSetPreferencesKey("enabled_scrapers")
         val ONLY_CACHED = booleanPreferencesKey("only_cached")
         val HOME_TILES = stringPreferencesKey("home_tiles_json")
+        val AUDIO_PASSTHROUGH = booleanPreferencesKey("audio_passthrough")
     }
 
     private val tilesJson = Json { ignoreUnknownKeys = true }
@@ -106,6 +107,16 @@ class SettingsRepository @Inject constructor(
     /** When true, only sources already cached on a debrid service are shown. */
     val onlyCached: Flow<Boolean> =
         context.dataStore.data.map { it[Keys.ONLY_CACHED] ?: false }
+
+    /**
+     * When on, the internal player bitstreams Dolby Digital / DTS / TrueHD /
+     * Atmos untouched to the receiver over HDMI (S/PDIF) instead of decoding to
+     * PCM — the same "passthrough" Kodi offers. Only enable it when the TV is
+     * connected to an AV receiver or soundbar that can decode those formats;
+     * otherwise the built-in TV speakers may get silence. Off by default.
+     */
+    val audioPassthrough: Flow<Boolean> =
+        context.dataStore.data.map { it[Keys.AUDIO_PASSTHROUGH] ?: false }
 
     /** Customizable Home quick-access tiles (Disney/Marvel-style shortcuts). */
     val homeTiles: Flow<List<HomeTile>> =
@@ -175,6 +186,12 @@ class SettingsRepository @Inject constructor(
     }
 
     suspend fun currentOnlyCached(): Boolean = onlyCached.first()
+
+    suspend fun setAudioPassthrough(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.AUDIO_PASSTHROUGH] = enabled }
+    }
+
+    suspend fun currentAudioPassthrough(): Boolean = audioPassthrough.first()
 
     suspend fun currentHomeTiles(): List<HomeTile> = homeTiles.first()
 

@@ -37,6 +37,7 @@ data class SettingsUiState(
     val omdbKey: String = "",
     val anthropicKey: String = "",
     val allowInsecure: Boolean = false,
+    val audioPassthrough: Boolean = false,
     val premiumizeKey: String = "",
     val orionKey: String = "",
     val torrentioUrl: String = "",
@@ -302,6 +303,7 @@ class SettingsViewModel @Inject constructor(
             omdbKey = settings.currentOmdbApiKey(),
             anthropicKey = settings.currentAnthropicApiKey().orEmpty(),
             allowInsecure = settings.currentAllowInsecureTls(),
+            audioPassthrough = settings.currentAudioPassthrough(),
             featuredSource = settings.currentFeaturedSource(),
             downloadFolder = settings.currentDownloadFolderUri(),
             epgOffsetMinutes = settings.currentEpgOffsetMinutes(),
@@ -353,6 +355,11 @@ class SettingsViewModel @Inject constructor(
     fun setAllowInsecure(enabled: Boolean) {
         _state.value = _state.value.copy(allowInsecure = enabled)
         viewModelScope.launch { settings.setAllowInsecureTls(enabled) }
+    }
+
+    fun setAudioPassthrough(enabled: Boolean) {
+        _state.value = _state.value.copy(audioPassthrough = enabled)
+        viewModelScope.launch { settings.setAudioPassthrough(enabled) }
     }
 
     fun setPremiumizeKey(value: String) = update(value) {

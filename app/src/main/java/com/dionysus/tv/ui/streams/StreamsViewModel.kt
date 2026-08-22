@@ -127,7 +127,14 @@ class StreamsViewModel @Inject constructor(
     fun play(source: StreamSource) {
         viewModelScope.launch {
             _state.value = _state.value.copy(resolvingTitle = source.title, message = null)
-            val url = source.url ?: debrid.resolve(source)?.playbackUrl
+            val url = try {
+                source.url ?: debrid.resolve(source)?.playbackUrl
+            } catch (e: com.dionysus.tv.data.debrid.DebridException) {
+                // Account-level problem (usage/fair-use limit, expired premium): show
+                // the real reason instead of playing the provider's notice video.
+                _state.value = _state.value.copy(resolvingTitle = null, message = e.message)
+                return@launch
+            }
             _state.value = _state.value.copy(resolvingTitle = null)
             if (url.isNullOrBlank()) {
                 _state.value = _state.value.copy(
