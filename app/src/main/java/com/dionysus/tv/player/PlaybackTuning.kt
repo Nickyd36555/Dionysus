@@ -58,6 +58,9 @@ object PlaybackTuning {
             "--audio-time-stretch",
             "--audio-resampler=soxr",   // high-quality audio resampling
             "--deinterlace=-1",         // auto: only engages on interlaced sources
+            // Prefer the English audio track when a stream ships several languages.
+            // ISO codes first (most reliable), then common labels.
+            "--audio-language=eng,en,english",
         )
         // NOTE: hardware "direct rendering" (MediaCodec/OMX) is left ENABLED — it is
         // the lightest 4K path. The previous --no-*-dr flags disabled it and forced a

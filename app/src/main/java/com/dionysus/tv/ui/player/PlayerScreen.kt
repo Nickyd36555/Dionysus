@@ -136,6 +136,10 @@ fun PlayerScreen(
     var retryCount by remember { mutableIntStateOf(0) }
     val errorFocus = remember { FocusRequester() }
 
+    // Auto-select English audio once tracks are available. Only fires once per load,
+    // and never after the user has manually chosen a track (which sets this true).
+    var audioAutoSelected by remember { mutableStateOf(false) }
+
     // Only a stream that IS playing yet reports no length is genuinely live.
     // A black screen that never started (hasPlayed == false) is a failure, not live.
     val isLive = hasPlayed && lengthMs <= 0
@@ -184,6 +188,7 @@ fun PlayerScreen(
         hasPlayed = false
         playbackError = false
         seeked = false
+        audioAutoSelected = false
         runCatching { if (retryCount > 0) player.stop() }
         runCatching { pfdHolder[0]?.close() }
         pfdHolder[0] = null
@@ -222,6 +227,23 @@ fun PlayerScreen(
             lengthMs = player.length
             isPlaying = player.isPlaying
             if (player.isPlaying || lengthMs > 0) hasPlayed = true
+
+            // Once tracks are known, prefer the English audio track if there is one
+            // and it isn't already selected. Runs once per load; a manual choice in
+            // the Audio panel disables it so the user's pick always wins.
+            if (!audioAutoSelected && player.isPlaying) {
+                val tracks = runCatching { player.audioTracks?.toList() }.getOrNull().orEmpty()
+                if (tracks.isNotEmpty()) {
+                    audioAutoSelected = true
+                    val english = tracks.firstOrNull { t ->
+                        val n = t.name?.lowercase().orEmpty()
+                        "english" in n || Regex("\\beng?\\b").containsMatchIn(n)
+                    }
+                    if (english != null && english.id != player.audioTrack) {
+                        runCatching { player.audioTrack = english.id }
+                    }
+                }
+            }
             val resume = viewModel.startPositionMs.value
             if (!seeked && lengthMs > 0 && resume != null && resume > 3_000) {
                 player.time = resume
@@ -396,7 +418,7 @@ fun PlayerScreen(
                 subDelayMs = subDelayMs,
                 firstFocus = panelFocus,
                 externalPlayers = remember { viewModel.installedExternalPlayers() },
-                onSelectAudio = { player.audioTrack = it; closePanel() },
+                onSelectAudio = { audioAutoSelected = true; player.audioTrack = it; closePanel() },
                 onSelectSubtitle = { player.spuTrack = it; closePanel() },
                 onSelectSpeed = { speed = it; closePanel() },
                 onSelectAspect = { aspect = it; closePanel() },
