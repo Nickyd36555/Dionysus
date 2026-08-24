@@ -296,11 +296,14 @@ private fun NowNextPreview(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // Fixed height so the panel never grows/shrinks as the focused channel's
+            // description or "up next" appears/disappears — that reflow was the bounce.
+            .height(NOW_NEXT_HEIGHT)
             .padding(bottom = 10.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(Color(0xFF14141C))
             .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Top,
     ) {
         Box(
             modifier = Modifier.size(92.dp, 52.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF0B0B10)),
@@ -617,6 +620,9 @@ private const val PX_PER_MIN = 4           // dp of width per minute of programm
 private const val SLOT_MIN = 30            // ruler tick every 30 minutes
 private val CHANNEL_COL_WIDTH = 168.dp
 private val GUIDE_ROW_HEIGHT = 42.dp
+// Fixed height for the now/next preview panel so it never reflows the guide below
+// as descriptions / "up next" lines come and go between channels.
+private val NOW_NEXT_HEIGHT = 118.dp
 
 @Composable
 private fun EpgGuide(
