@@ -27,6 +27,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
+import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -109,21 +110,27 @@ class IptvRepository @Inject constructor(
         val base = normalizeHost(host)
         require(base.startsWith("http")) { "Enter a valid Xtream server URL (http://host:port)." }
         // Verify credentials before saving.
-        val authUrl = "$base/player_api.php?username=${username.trim()}&password=${password.trim()}"
+        val cleanUser = username.trim()
+        val cleanPassword = password.trim()
+        val authUrl = "$base/player_api.php?username=${enc(cleanUser)}&password=${enc(cleanPassword)}"
         val body = fetchText(authUrl)
-        val auth = runCatching { json.parseToJsonElement(body).jsonObjectOrNull()?.get("user_info") }.getOrNull()
-        require(auth != null) { "Server didn't accept those Xtream credentials." }
+        val userInfo = runCatching {
+            json.parseToJsonElement(body).jsonObjectOrNull()?.get("user_info") as? JsonObject
+        }.getOrNull()
+        require(userInfo != null && userInfo.str("auth") != "0") {
+            "Server didn't accept those Xtream credentials."
+        }
         // Use a custom EPG URL if provided, otherwise the provider's own xmltv.php.
         val epg = epgUrl.trim().ifBlank {
-            "$base/xmltv.php?username=${username.trim()}&password=${password.trim()}"
+            "$base/xmltv.php?username=${enc(cleanUser)}&password=${enc(cleanPassword)}"
         }
         val playlist = StoredPlaylist(
             id = UUID.randomUUID().toString(),
             name = name.ifBlank { "Xtream" },
             kind = PlaylistKind.XTREAM,
             host = base,
-            username = username.trim(),
-            password = password.trim(),
+            username = cleanUser,
+            password = cleanPassword,
             epgUrl = epg,
         )
         savePlaylist(playlist)
@@ -344,32 +351,42 @@ class IptvRepository @Inject constructor(
     }
 
     private suspend fun loadXtreamChannels(pl: StoredPlaylist): List<Channel> {
-        val catsUrl = "${pl.host}/player_api.php?username=${pl.username}&password=${pl.password}&action=get_live_categories"
-        val streamsUrl = "${pl.host}/player_api.php?username=${pl.username}&password=${pl.password}&action=get_live_streams"
-        val categories = runCatching {
-            (json.parseToJsonElement(fetchText(catsUrl)) as? JsonArray)?.associate {
-                val o = it as JsonObject
-                o.str("category_id") to o.str("category_name")
-            }.orEmpty()
-        }.getOrDefault(emptyMap())
+        val user = enc(pl.username)
+        val pass = enc(pl.password)
+        val apiChannels = runCatching {
+            val catsUrl = "${pl.host}/player_api.php?username=$user&password=$pass&action=get_live_categories"
+            val streamsUrl = "${pl.host}/player_api.php?username=$user&password=$pass&action=get_live_streams"
+            val categories = runCatching {
+                (json.parseToJsonElement(fetchText(catsUrl)) as? JsonArray)?.associate {
+                    val o = it as JsonObject
+                    o.str("category_id") to o.str("category_name")
+                }.orEmpty()
+            }.getOrDefault(emptyMap())
+            val streams = json.parseToJsonElement(fetchText(streamsUrl)) as? JsonArray
+                ?: emptyList()
+            streams.mapNotNull { el ->
+                val o = el as? JsonObject ?: return@mapNotNull null
+                val streamId = o.str("stream_id").ifBlank { return@mapNotNull null }
+                Channel(
+                    id = "${pl.id}|$streamId",
+                    name = o.str("name").ifBlank { "Channel $streamId" },
+                    streamUrl = "${pl.host}/live/${pl.username}/${pl.password}/$streamId.ts",
+                    logo = o.str("stream_icon").takeIf { it.isNotBlank() },
+                    group = categories[o.str("category_id")]?.takeIf { it.isNotBlank() } ?: "General",
+                    epgId = o.str("epg_channel_id").takeIf { it.isNotBlank() },
+                    playlistId = pl.id,
+                    playlistName = pl.name,
+                    xtreamStreamId = streamId,
+                )
+            }
+        }.getOrDefault(emptyList())
+        if (apiChannels.isNotEmpty()) return apiChannels
 
-        val streams = json.parseToJsonElement(fetchText(streamsUrl)) as? JsonArray ?: return emptyList()
-        return streams.mapNotNull { el ->
-            val o = el as? JsonObject ?: return@mapNotNull null
-            val streamId = o.str("stream_id").ifBlank { return@mapNotNull null }
-            val ext = "ts"
-            Channel(
-                id = "${pl.id}|$streamId",
-                name = o.str("name").ifBlank { "Channel $streamId" },
-                streamUrl = "${pl.host}/live/${pl.username}/${pl.password}/$streamId.$ext",
-                logo = o.str("stream_icon").takeIf { it.isNotBlank() },
-                group = categories[o.str("category_id")]?.takeIf { it.isNotBlank() } ?: "General",
-                epgId = o.str("epg_channel_id").takeIf { it.isNotBlank() },
-                playlistId = pl.id,
-                playlistName = pl.name,
-                xtreamStreamId = streamId,
-            )
-        }
+        // Some valid Xtream panels authenticate through player_api.php but block or
+        // return malformed action responses. Their M3U endpoint still exposes the
+        // same live lineup, so fall back instead of showing a connected empty account.
+        val m3uUrl = "${pl.host}/get.php?username=$user&password=$pass&type=m3u_plus&output=ts"
+        return M3uParser.parse(fetchText(m3uUrl), pl.id, pl.name)
     }
 
     /**
@@ -580,6 +597,9 @@ class IptvRepository @Inject constructor(
         if (!h.startsWith("http")) h = "http://$h"
         return h
     }
+
+    private fun enc(value: String): String =
+        URLEncoder.encode(value, Charsets.UTF_8.name())
 
     private fun JsonObject.str(key: String): String =
         runCatching { this[key]?.jsonPrimitive?.content }.getOrNull().orEmpty().let {

@@ -34,7 +34,7 @@ jobs:
           elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             NAME="${GITHUB_REF_NAME#v}"
           else
-            NAME="1.0.0"
+            NAME="1.0.1"
           fi
           IFS='.' read -r MAJOR MINOR PATCH <<< "$NAME"
           CODE=$(( ${MAJOR:-0} * 10000 + ${MINOR:-0} * 100 + ${PATCH:-0} ))
