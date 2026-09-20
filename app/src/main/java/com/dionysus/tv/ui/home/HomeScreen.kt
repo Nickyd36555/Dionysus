@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dionysus.tv.core.model.MediaItem
+import com.dionysus.tv.core.model.MediaType
 import com.dionysus.tv.data.settings.HomeTile
 import com.dionysus.tv.ui.components.AppButton
 import com.dionysus.tv.ui.components.FeaturedCarousel
@@ -51,6 +52,7 @@ import androidx.tv.material3.Text
 @Composable
 fun HomeScreen(
     onOpenDetail: (String) -> Unit,
+    mediaType: MediaType? = null,
     onOpenTile: (String) -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
     updateViewModel: UpdateViewModel = hiltViewModel(),
@@ -58,6 +60,10 @@ fun HomeScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val updateState by updateViewModel.state.collectAsStateWithLifecycle()
     var menuItem by remember { mutableStateOf<MediaItem?>(null) }
+    val visibleFeatured = state.featured.filter { mediaType == null || it.type == mediaType }
+    val visibleRows = state.rows.map { row ->
+        row.copy(items = row.items.filter { mediaType == null || it.type == mediaType })
+    }.filter { it.items.isNotEmpty() }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -74,7 +80,7 @@ fun HomeScreen(
                 // Only show a full-screen message when there is genuinely nothing at all.
                 // Tiles (which have defaults and don't need TMDB) must always render, so a
                 // failed catalog can't hide them — that was why the tiles "disappeared".
-                val nothingAtAll = state.featured.isEmpty() && state.rows.isEmpty() && state.tiles.isEmpty()
+                val nothingAtAll = if (mediaType == null) state.featured.isEmpty() && state.rows.isEmpty() && state.tiles.isEmpty() else visibleFeatured.isEmpty() && visibleRows.isEmpty()
                 when {
                     state.isLoading && nothingAtAll -> CenteredMessage("Loading…")
                     nothingAtAll -> CenteredMessage(
@@ -85,16 +91,26 @@ fun HomeScreen(
                         contentPadding = PaddingValues(top = 16.dp, bottom = 48.dp),
                         verticalArrangement = Arrangement.spacedBy(28.dp),
                     ) {
-                        if (state.featured.isNotEmpty()) {
+                        if (mediaType != null) {
+                            item {
+                                Text(
+                                    text = if (mediaType == MediaType.MOVIE) "Movies" else "Series",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(horizontal = 28.dp),
+                                )
+                            }
+                        }
+                        if (visibleFeatured.isNotEmpty()) {
                             item {
                                 FeaturedCarousel(
-                                    items = state.featured,
+                                    items = visibleFeatured,
                                     onPlay = { onOpenDetail(it.id) },
                                     onDetails = { onOpenDetail(it.id) },
                                 )
                             }
                         }
-                        items(state.rows, key = { it.id }) { row ->
+                        items(visibleRows, key = { it.id }) { row ->
                             MediaRow(
                                 title = row.title,
                                 items = row.items,
