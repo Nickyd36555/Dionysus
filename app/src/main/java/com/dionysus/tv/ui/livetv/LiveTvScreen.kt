@@ -47,6 +47,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -218,7 +219,10 @@ private fun LiveView(
     LaunchedEffect(immersive) { railController.setHidden(immersive) }
     LaunchedEffect(immersive, interactionTick) {
         if (immersive) return@LaunchedEffect
-        delay(5_000)
+        // Only collapse after genuine inactivity. Every key press and any active
+        // scrolling bumps interactionTick, restarting this countdown — so the drawer
+        // never closes while the user is navigating, scrolling, or hunting a channel.
+        delay(10_000)
         showCategories = false
         immersive = true
     }
@@ -282,6 +286,7 @@ private fun LiveView(
                 onFocusChannel = { previewChannel = it; viewModel.prefetchGuide(listOf(it)) },
                 onToggleFavorite = viewModel::toggleFavorite,
                 onExitLeft = if (!showCategories) ({ wake() }) else null,
+                onActivity = { interactionTick++ },
             )
         }
     }
@@ -638,6 +643,7 @@ private fun EpgGuide(
     onFocusChannel: (Channel) -> Unit,
     onToggleFavorite: (Channel) -> Unit,
     onExitLeft: (() -> Unit)? = null,
+    onActivity: () -> Unit = {},
 ) {
     if (channels.isEmpty()) {
         CenterMessage("No channels in this category.")
@@ -646,6 +652,22 @@ private fun EpgGuide(
     val slotMs = SLOT_MIN * 60_000L
     val listState = rememberLazyListState()
     val scroll = rememberScrollState()
+    // Treat active scrolling (channels or timeline) as user activity so the category
+    // drawer / immersive auto-hide never fires while the guide is still moving. Bumps
+    // repeatedly during motion and once more when it settles, so the inactivity
+    // countdown only starts after the guide actually stops.
+    LaunchedEffect(listState, scroll) {
+        snapshotFlow { listState.isScrollInProgress || scroll.isScrollInProgress }
+            .collect { moving ->
+                if (moving) {
+                    while (listState.isScrollInProgress || scroll.isScrollInProgress) {
+                        onActivity()
+                        delay(400)
+                    }
+                    onActivity()
+                }
+            }
+    }
     val restoreFocus = remember { FocusRequester() }
     // Return focus to the channel you were just watching (not the nav rail).
     LaunchedEffect(restoreFocusId, channels.size) {
