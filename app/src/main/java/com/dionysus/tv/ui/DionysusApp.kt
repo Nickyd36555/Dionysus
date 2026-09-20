@@ -10,12 +10,12 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.dionysus.tv.ui.components.MainScaffold
+import com.dionysus.tv.core.model.MediaType
 import com.dionysus.tv.ui.detail.DetailScreen
 import com.dionysus.tv.ui.downloads.DownloadsScreen
 import com.dionysus.tv.ui.home.HomeScreen
 import com.dionysus.tv.ui.livetv.LiveTvPlayerScreen
 import com.dionysus.tv.ui.livetv.LiveTvScreen
-import com.dionysus.tv.ui.livetv.MoviesScreen
 import com.dionysus.tv.ui.navigation.Routes
 import com.dionysus.tv.ui.navigation.TopLevelDestination
 import com.dionysus.tv.ui.player.PlayerScreen
@@ -68,8 +68,18 @@ fun DionysusApp(navController: NavHostController = rememberNavController()) {
 
         composable(Routes.MOVIES) {
             TopLevel(navController) {
-                MoviesScreen(
-                    onPlay = { url, title -> navController.navigate(Routes.player(url, title)) },
+                HomeScreen(
+                    mediaType = MediaType.MOVIE,
+                    onOpenDetail = { navController.navigate(Routes.detail(it)) },
+                )
+            }
+        }
+
+        composable(Routes.SERIES) {
+            TopLevel(navController) {
+                HomeScreen(
+                    mediaType = MediaType.TV_SHOW,
+                    onOpenDetail = { navController.navigate(Routes.detail(it)) },
                 )
             }
         }
