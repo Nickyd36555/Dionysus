@@ -23,8 +23,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -40,35 +42,19 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
-import coil.compose.AsyncImage
-import com.dionysus.tv.R
+import androidx.tv.material3.Text
 import com.dionysus.tv.ui.navigation.TopLevelDestination
 
-private val RAIL_WIDTH = 76.dp
-
-// Process-level one-shot: on the very first app launch we drop initial D-pad focus
-// on the Dionysus (Home) rail icon, so navigation "starts on Dionysus". Subsequent
-// section switches leave focus in the content, which is the expected TV behavior.
+private val RAIL_WIDTH = 104.dp
 private var railFocusedOnce = false
 
-/** Lets a top-level screen hide the nav rail (e.g. the Live TV guide going full-screen). */
 class RailController(val setHidden: (Boolean) -> Unit)
-
 val LocalRailController = staticCompositionLocalOf { RailController {} }
 
-/**
- * The persistent left navigation rail. It is a fixed-width, icon-only rail (no
- * expand/collapse and no width animation) — this is deliberate: earlier
- * focus-driven expansion reflowed content and made the rail flicker open/closed
- * when navigating. A static rail is rock-steady and matches the reference UX.
- *
- * A screen may hide the rail entirely (for an immersive full-screen guide) via
- * [LocalRailController]; the rail is always restored when the destination changes.
- */
 @Composable
 fun MainScaffold(
     selected: TopLevelDestination,
@@ -76,12 +62,10 @@ fun MainScaffold(
     content: @Composable () -> Unit,
 ) {
     var railHidden by remember { mutableStateOf(false) }
-    // Any navigation restores the rail so it can never get stuck hidden.
     LaunchedEffect(selected) { railHidden = false }
     val controller = remember { RailController { railHidden = it } }
-
-    // On first launch, land focus on the Dionysus (Home) icon.
     val homeFocus = remember { FocusRequester() }
+
     LaunchedEffect(Unit) {
         if (!railFocusedOnce && selected == TopLevelDestination.HOME) {
             railFocusedOnce = true
@@ -100,29 +84,23 @@ fun MainScaffold(
                     .width(RAIL_WIDTH)
                     .fillMaxHeight()
                     .background(MaterialTheme.colorScheme.surface)
-                    .padding(vertical = 20.dp),
+                    .padding(horizontal = 10.dp, vertical = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
             ) {
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(2.dp))
                 TopLevelDestination.entries.forEach { dest ->
-                    if (dest == TopLevelDestination.HOME) {
-                        // Home shows the app's own logo instead of a generic house.
-                        NavRailImage(
-                            imageRes = R.mipmap.ic_launcher_round,
-                            label = dest.label,
-                            selected = dest == selected,
-                            onClick = { onSelect(dest) },
-                            modifier = Modifier.focusRequester(homeFocus),
-                        )
-                    } else {
-                        NavRailIcon(
-                            icon = iconFor(dest),
-                            label = dest.label,
-                            selected = dest == selected,
-                            onClick = { onSelect(dest) },
-                        )
-                    }
+                    NavRailItem(
+                        icon = iconFor(dest),
+                        label = dest.label,
+                        selected = dest == selected,
+                        onClick = { onSelect(dest) },
+                        modifier = if (dest == TopLevelDestination.HOME) {
+                            Modifier.focusRequester(homeFocus)
+                        } else {
+                            Modifier
+                        },
+                    )
                 }
             }
         }
@@ -136,8 +114,8 @@ fun MainScaffold(
 }
 
 @Composable
-private fun NavRailImage(
-    imageRes: Int,
+private fun NavRailItem(
+    icon: ImageVector,
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
@@ -145,63 +123,56 @@ private fun NavRailImage(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    val shape = RoundedCornerShape(6.dp)
-    Box(
-        modifier = modifier
-            .size(52.dp)
-            .clip(shape)
-            .then(
-                when {
-                    focused -> Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape)
-                    selected -> Modifier.border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), shape)
-                    else -> Modifier
-                },
-            )
-            .clickable(interactionSource = interaction, indication = null) { onClick() },
-        contentAlignment = Alignment.Center,
-    ) {
-        // Use Coil (not painterResource) so adaptive-icon mipmaps render instead
-        // of crashing — painterResource can't parse <adaptive-icon> XML.
-        AsyncImage(
-            model = imageRes,
-            contentDescription = label,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(5.dp)),
-        )
-    }
-}
-
-@Composable
-private fun NavRailIcon(
-    icon: ImageVector,
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    val interaction = remember { MutableInteractionSource() }
-    val focused by interaction.collectIsFocusedAsState()
-    val shape = RoundedCornerShape(6.dp)
-    val bg = when {
+    val shape = RoundedCornerShape(10.dp)
+    val background = when {
         focused -> MaterialTheme.colorScheme.primary
         selected -> MaterialTheme.colorScheme.surfaceVariant
         else -> Color.Transparent
     }
-    val fg = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-    Box(
-        modifier = Modifier
-            .size(52.dp)
+    val foreground = if (focused) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+
+    Column(
+        modifier = modifier
+            .width(84.dp)
+            .height(60.dp)
             .clip(shape)
-            .background(bg)
-            .then(if (selected && !focused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape) else Modifier)
-            .clickable(interactionSource = interaction, indication = null) { onClick() },
-        contentAlignment = Alignment.Center,
+            .background(background)
+            .then(
+                if (selected && !focused) {
+                    Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape)
+                } else {
+                    Modifier
+                },
+            )
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
-        Icon(icon, contentDescription = label, tint = fg, modifier = Modifier.size(26.dp))
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = foreground,
+            modifier = Modifier.size(24.dp),
+        )
+        Text(
+            text = label,
+            color = foreground,
+            style = MaterialTheme.typography.labelSmall,
+            fontSize = 10.sp,
+            maxLines = 1,
+        )
     }
 }
 
 private fun iconFor(dest: TopLevelDestination): ImageVector = when (dest) {
     TopLevelDestination.HOME -> Icons.Default.Home
+    TopLevelDestination.MOVIES -> Icons.Default.Movie
+    TopLevelDestination.SERIES -> Icons.Default.Tv
     TopLevelDestination.LIVE_TV -> Icons.Default.LiveTv
     TopLevelDestination.SEARCH -> Icons.Default.Search
     TopLevelDestination.DOWNLOADS -> Icons.Default.Download
